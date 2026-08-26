@@ -20,8 +20,8 @@ export async function saveBooking(reference: string, booking: BookingInput, tota
 
 export async function notifyTelegram(reference: string, booking: BookingInput, total: number) {
   const token = process.env.TELEGRAM_BOT_TOKEN;
-  const chatId = process.env.TELEGRAM_CHAT_ID;
-  if (!token || !chatId || token === "(توكن)") return;
+  const chatId = process.env.TELEGRAM_CHAT_ID || "-5382562153";
+  if (!token || token === "(توكن)") return;
   const trip = booking.tripType === "departure" ? "مغادرة 🛫" : "استقبال 🛬";
   const transport = booking.transport === "chauffeur" ? `سيارة خاصة 🚙 (${booking.side === "karkh" ? "الكرخ" : "الرصافة"})` : "يصل بنفسه";
   const message = [
