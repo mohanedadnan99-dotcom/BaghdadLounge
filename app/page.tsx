@@ -5,7 +5,10 @@ export default function Home() {
   return (
     <main className="min-h-screen overflow-hidden bg-[#090909]">
       <section className="relative min-h-[100svh] flex items-end lg:items-center">
-        <div className="absolute inset-0 bg-[url('/lounge-baghdad-hero.jpg')] bg-cover bg-[36%_center] lg:bg-center" />
+        <div
+          className="absolute inset-0 bg-cover bg-[36%_center] lg:bg-center"
+          style={{ backgroundImage: "url('https://raw.githubusercontent.com/mohanedadnan99-dotcom/BaghdadLounge/main/public/lounge-baghdad-hero.jpg')" }}
+        />
         <div className="absolute inset-0 bg-gradient-to-t from-[#090909] via-black/50 to-black/25 lg:bg-gradient-to-l lg:from-black/90 lg:via-black/55 lg:to-black/10" />
         <div className="absolute inset-0 hero-noise" />
 
