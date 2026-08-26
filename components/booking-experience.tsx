@@ -23,7 +23,8 @@ export function BookingExperience() {
   const [result,setResult] = useState<{reference:string; paymentUrl?:string}|null>(null);
   const loungeTotal = form.passengers * 40000;
   const carTotal = form.transport === "chauffeur" ? 75000 : 0;
-  const total = loungeTotal + carTotal;
+  const extraBaggageTotal = form.bags > 4 ? 10000 : 0;
+  const total = loungeTotal + carTotal + extraBaggageTotal;
   const patch = <K extends keyof FormState>(key:K,value:FormState[K]) => setForm(v=>({...v,[key]:value}));
 
   const canContinue = useMemo(() => {
@@ -88,7 +89,7 @@ export function BookingExperience() {
               </div>
               {form.transport==="chauffeur" && <div className="mt-6 grid gap-4 border-t border-white/8 pt-6 sm:grid-cols-2">
                 <Field label="الجانب"><select className="field" value={form.side} onChange={e=>patch("side",e.target.value as FormState["side"])}><option value="karkh">الكرخ</option><option value="rusafa">الرصافة</option></select></Field>
-                <Field label={form.tripType==="arrival"?"عنوان التوصيل":"العنوان الكامل"}><input className="field" placeholder={form.tripType==="arrival"?"المنطقة، الشارع، المحلة":"المنطقة، الشارع، المحلة"} value={form.address} onChange={e=>patch("address",e.target.value)}/></Field>
+                <Field label={form.tripType==="arrival"?"عنوان التوصيل":"العنوان الكامل"}><input className="field" placeholder="المنطقة، الشارع، المحلة" value={form.address} onChange={e=>patch("address",e.target.value)}/></Field>
                 <div className="sm:col-span-2"><Field label="أقرب نقطة دالة (اختياري)"><input className="field" placeholder="مثال: قرب المستشفى..." value={form.landmark} onChange={e=>patch("landmark",e.target.value)}/></Field></div>
               </div>}
             </div>}
@@ -106,6 +107,7 @@ export function BookingExperience() {
                   <Counter label="عدد الحقائب" value={form.bags} min={0} max={40} onChange={value=>patch("bags",value)} />
                 </div>
                 <p className="sm:col-span-2 -mt-2 text-[11px] text-[#8f897f]">* الأطفال دون سن 12 سنة دخولهم مجانًا.</p>
+                {form.bags > 4 && <div className="sm:col-span-2 -mt-2 border border-[#c9a55c]/25 bg-[#c9a55c]/5 px-4 py-3 text-[11px] leading-6 text-[#cdbb94]">لديك أكثر من 4 حقائب، لذلك تُضاف رسوم خدمة قدرها 10,000 د.ع لتوفير عربة إضافية وعامل للمساعدة بالحقائب.</div>}
                 <div className="sm:col-span-2"><Field label="ملاحظات إضافية (اختياري)"><textarea className="field min-h-24 resize-none" placeholder="أي تفاصيل تساعدنا في ترتيب تجربتك..." value={form.notes} onChange={e=>patch("notes",e.target.value)}/></Field></div>
               </div>
             </div>}
@@ -136,7 +138,11 @@ export function BookingExperience() {
               {form.date&&<Summary label="الموعد" value={`${form.date} · ${form.time||"--:--"}`}/>} 
             </div>
             <div className="my-7 h-px bg-white/10" />
-            <div className="space-y-3 text-xs text-[#a19b92]"><div className="flex justify-between"><span>دخول الصالة × {form.passengers}</span><span>{money(loungeTotal)}</span></div>{carTotal>0&&<div className="flex justify-between"><span>السيارة الخاصة</span><span>{money(carTotal)}</span></div>}</div>
+            <div className="space-y-3 text-xs text-[#a19b92]">
+              <div className="flex justify-between"><span>دخول الصالة × {form.passengers}</span><span>{money(loungeTotal)}</span></div>
+              {carTotal>0&&<div className="flex justify-between"><span>السيارة الخاصة</span><span>{money(carTotal)}</span></div>}
+              {extraBaggageTotal>0&&<div className="flex justify-between"><span>خدمة حقائب إضافية</span><span>{money(extraBaggageTotal)}</span></div>}
+            </div>
             <div className="mt-5 flex items-end justify-between border-t border-dashed border-white/15 pt-5"><span className="text-sm">المجموع</span><strong className="text-xl text-[#dfc17c]">{money(total)}</strong></div>
             <p className="mt-6 text-[10px] leading-5 text-[#605d58]">دخول الصالة: 40,000 د.ع للشخص. الأطفال دون سن 12 سنة مجانًا. سعر السيارة ثابت للكرخ أو الرصافة. يخضع الحجز للتأكيد النهائي من فريقنا.</p>
           </aside>
