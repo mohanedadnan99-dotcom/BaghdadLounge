@@ -1,0 +1,42 @@
+@import "tailwindcss";
+
+:root {
+  --gold: #c9a55c;
+  --gold-light: #ecd49f;
+  --ink: #090909;
+  --card: #121212;
+  --muted: #a7a29a;
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  background: var(--ink);
+  color: #f6f2e9;
+  font-family: var(--font-arabic), sans-serif;
+}
+button, input, select, textarea { font: inherit; }
+button { cursor: pointer; }
+::selection { background: var(--gold); color: #090909; }
+
+.hero-noise {
+  background-image: radial-gradient(circle at 15% 20%, rgba(201,165,92,.12), transparent 32%),
+    radial-gradient(circle at 80% 80%, rgba(201,165,92,.08), transparent 30%);
+}
+.gold-text {
+  background: linear-gradient(110deg, #a9823e, #f1d79d 48%, #b88d43);
+  -webkit-background-clip: text;
+  color: transparent;
+}
+.field {
+  width: 100%; border: 1px solid #34312d; background: #0d0d0d; color: #f8f5ed;
+  border-radius: 12px; padding: 13px 14px; outline: none; transition: .2s;
+}
+.field:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(201,165,92,.12); }
+.field::placeholder { color: #69655f; }
+.field option { background: #111; }
+.label { display: block; margin-bottom: 8px; color: #d7d0c4; font-size: 13px; }
+.choice { border: 1px solid #302e2a; background: #111; transition: .2s; }
+.choice:hover { border-color: #64573c; }
+.choice.active { border-color: var(--gold); background: rgba(201,165,92,.09); box-shadow: inset 0 0 0 1px rgba(201,165,92,.15); }
