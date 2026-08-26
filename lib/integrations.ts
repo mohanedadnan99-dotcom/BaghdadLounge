@@ -22,19 +22,36 @@ export async function notifyTelegram(reference: string, booking: BookingInput, t
   const token = process.env.TELEGRAM_BOT_TOKEN;
   const chatId = process.env.TELEGRAM_CHAT_ID || "-5382562153";
   if (!token || token === "(توكن)") return;
-  const trip = booking.tripType === "departure" ? "مغادرة 🛫" : "استقبال 🛬";
-  const transport = booking.transport === "chauffeur" ? `سيارة خاصة 🚙 (${booking.side === "karkh" ? "الكرخ" : "الرصافة"})` : "يصل بنفسه";
+
+  const trip = booking.tripType === "departure" ? "مغادرة" : "استقبال";
+  const side = booking.side === "karkh" ? "الكرخ" : "الرصافة";
+  const transport = booking.transport === "chauffeur" ? `نعم — ${side}` : "لا";
+
   const message = [
-    "✨ حجز جديد — لاونج بغداد", "━━━━━━━━━━━━━━", `🔖 رقم الحجز: ${reference}`,
-    `✈️ نوع الرحلة: ${trip}`, `👤 الاسم: ${booking.name}`, `📞 الهاتف: ${booking.phone}`,
-    `🛩 رقم الرحلة: ${booking.flightNumber}`, `📅 الموعد: ${booking.date} — ${booking.time}`,
-    `👥 المسافرون: ${booking.passengers}`, `🧳 الحقائب: ${booking.bags}`, `🚘 الوصول: ${transport}`,
-    booking.transport === "chauffeur" ? `📍 العنوان: ${booking.address}${booking.landmark ? ` — ${booking.landmark}` : ""}` : "",
-    `💳 الدفع: ${booking.payment === "cash" ? "كاش" : "Wayl إلكتروني"}`,
-    `💰 الإجمالي: ${new Intl.NumberFormat("en-US").format(total)} د.ع`, booking.notes ? `📝 ملاحظات: ${booking.notes}` : "",
+    "حجز جديد — لاونج بغداد",
+    "━━━━━━━━━━━━━━",
+    `رقم الحجز: ${reference}`,
+    `نوع الرحلة: ${trip}`,
+    `الاسم: ${booking.name}`,
+    `رقم الهاتف: ${booking.phone}`,
+    `رقم الرحلة: ${booking.flightNumber}`,
+    `التاريخ: ${booking.date}`,
+    `الوقت: ${booking.time}`,
+    `عدد المسافرين: ${booking.passengers}`,
+    `عدد الحقائب: ${booking.bags}`,
+    `خدمة السيارة: ${transport}`,
+    booking.transport === "chauffeur" ? `العنوان: ${booking.address}` : "",
+    booking.transport === "chauffeur" && booking.landmark ? `أقرب نقطة دالة: ${booking.landmark}` : "",
+    `طريقة الدفع: ${booking.payment === "cash" ? "كاش" : "Wayl إلكتروني"}`,
+    booking.notes ? `ملاحظات: ${booking.notes}` : "",
+    "━━━━━━━━━━━━━━",
+    `الحساب: ${new Intl.NumberFormat("en-US").format(total)} د.ع`,
   ].filter(Boolean).join("\n");
+
   const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ chat_id: chatId, text: message }),
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ chat_id: chatId, text: message }),
   });
   if (!response.ok) throw new Error("Telegram notification failed");
 }
