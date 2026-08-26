@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ArrowLeft, ArrowRight, Banknote, CarFront, Check, CreditCard, Loader2, Luggage, PlaneLanding, PlaneTakeoff, Users } from "lucide-react";
+import { ArrowLeft, ArrowRight, Banknote, CarFront, Check, CreditCard, Loader2, Luggage, Minus, PlaneLanding, PlaneTakeoff, Plus, Users } from "lucide-react";
 
 type FormState = {
   tripType: "departure" | "arrival";
@@ -81,14 +81,14 @@ export function BookingExperience() {
             </div>}
 
             {step===2 && <div>
-              <StepTitle eyebrow="خدمة الوصول" title="كيف ستصل إلى المطار؟" />
+              <StepTitle eyebrow={form.tripType==="arrival"?"خدمة التوصيل":"خدمة الوصول"} title={form.tripType==="arrival"?"هل تحتاج سيارة توصلك بعد الوصول؟":"كيف ستصل إلى المطار؟"} />
               <div className="grid gap-3 sm:grid-cols-2">
-                <Choice active={form.transport==="self"} onClick={()=>patch("transport","self")} icon={<Users/>} title="سأصل بنفسي" desc="أصل إلى المطار بسيارتي أو مع شخص آخر" />
-                <Choice active={form.transport==="chauffeur"} onClick={()=>patch("transport","chauffeur")} icon={<CarFront/>} title="أحتاج سيارة خاصة" desc="سيارة مريحة توصلك من موقعك إلى المطار" badge="75,000 د.ع" />
+                <Choice active={form.transport==="self"} onClick={()=>patch("transport","self")} icon={<Users/>} title={form.tripType==="arrival"?"لا، شكرًا":"سأصل بنفسي"} desc={form.tripType==="arrival"?"أحتاج حجز الصالة فقط بدون سيارة":"أصل إلى المطار بسيارتي أو مع شخص آخر"} />
+                <Choice active={form.transport==="chauffeur"} onClick={()=>patch("transport","chauffeur")} icon={<CarFront/>} title="أحتاج سيارة خاصة" desc={form.tripType==="arrival"?"سيارة خاصة تستقبلك من المطار وتوصلك إلى وجهتك":"سيارة مريحة توصلك من موقعك إلى المطار"} badge="75,000 د.ع" />
               </div>
               {form.transport==="chauffeur" && <div className="mt-6 grid gap-4 border-t border-white/8 pt-6 sm:grid-cols-2">
                 <Field label="الجانب"><select className="field" value={form.side} onChange={e=>patch("side",e.target.value as FormState["side"])}><option value="karkh">الكرخ</option><option value="rusafa">الرصافة</option></select></Field>
-                <Field label="العنوان الكامل"><input className="field" placeholder="المنطقة، الشارع، المحلة" value={form.address} onChange={e=>patch("address",e.target.value)}/></Field>
+                <Field label={form.tripType==="arrival"?"عنوان التوصيل":"العنوان الكامل"}><input className="field" placeholder={form.tripType==="arrival"?"المنطقة، الشارع، المحلة":"المنطقة، الشارع، المحلة"} value={form.address} onChange={e=>patch("address",e.target.value)}/></Field>
                 <div className="sm:col-span-2"><Field label="أقرب نقطة دالة (اختياري)"><input className="field" placeholder="مثال: قرب المستشفى..." value={form.landmark} onChange={e=>patch("landmark",e.target.value)}/></Field></div>
               </div>}
             </div>}
@@ -101,10 +101,11 @@ export function BookingExperience() {
                 <Field label="رقم الرحلة"><input className="field" dir="ltr" placeholder="مثال: IA123" value={form.flightNumber} onChange={e=>patch("flightNumber",e.target.value.toUpperCase())}/></Field>
                 <Field label={form.tripType==="arrival"?"تاريخ الوصول":"تاريخ المغادرة"}><input className="field" type="date" value={form.date} onChange={e=>patch("date",e.target.value)}/></Field>
                 <Field label={form.tripType==="arrival"?"وقت الوصول المتوقع":"وقت الحضور المطلوب"}><input className="field" type="time" value={form.time} onChange={e=>patch("time",e.target.value)}/></Field>
-                <div className="grid grid-cols-2 gap-3">
-                  <Field label="عدد المسافرين"><input className="field" type="number" min={1} max={20} value={form.passengers} onChange={e=>patch("passengers",Math.max(1,Number(e.target.value)))}/></Field>
-                  <Field label="عدد الحقائب"><input className="field" type="number" min={0} max={40} value={form.bags} onChange={e=>patch("bags",Math.max(0,Number(e.target.value)))}/></Field>
+                <div className="sm:col-span-2 grid gap-3 sm:grid-cols-2">
+                  <Counter label="عدد المسافرين" value={form.passengers} min={1} max={20} onChange={value=>patch("passengers",value)} />
+                  <Counter label="عدد الحقائب" value={form.bags} min={0} max={40} onChange={value=>patch("bags",value)} />
                 </div>
+                <p className="sm:col-span-2 -mt-2 text-[11px] text-[#8f897f]">* الأطفال دون سن 12 سنة دخولهم مجانًا.</p>
                 <div className="sm:col-span-2"><Field label="ملاحظات إضافية (اختياري)"><textarea className="field min-h-24 resize-none" placeholder="أي تفاصيل تساعدنا في ترتيب تجربتك..." value={form.notes} onChange={e=>patch("notes",e.target.value)}/></Field></div>
               </div>
             </div>}
@@ -129,7 +130,7 @@ export function BookingExperience() {
             <h3 className="mt-3 text-xl">تجربة لاونج بغداد</h3>
             <div className="mt-7 space-y-4 text-sm">
               <Summary label="نوع الرحلة" value={form.tripType==="departure"?"مغادرة":"استقبال"}/>
-              <Summary label="الوصول للمطار" value={form.transport==="chauffeur"?"سيارة خاصة":"وصول شخصي"}/>
+              <Summary label={form.tripType==="arrival"?"التوصيل بعد الوصول":"الوصول للمطار"} value={form.transport==="chauffeur"?"سيارة خاصة":form.tripType==="arrival"?"بدون سيارة":"وصول شخصي"}/>
               <Summary label="المسافرون" value={`${form.passengers} ${form.passengers===1?"شخص":"أشخاص"}`} icon={<Users size={14}/>}/>
               <Summary label="الحقائب" value={`${form.bags} حقيبة`} icon={<Luggage size={14}/>}/>
               {form.date&&<Summary label="الموعد" value={`${form.date} · ${form.time||"--:--"}`}/>} 
@@ -137,7 +138,7 @@ export function BookingExperience() {
             <div className="my-7 h-px bg-white/10" />
             <div className="space-y-3 text-xs text-[#a19b92]"><div className="flex justify-between"><span>دخول الصالة × {form.passengers}</span><span>{money(loungeTotal)}</span></div>{carTotal>0&&<div className="flex justify-between"><span>السيارة الخاصة</span><span>{money(carTotal)}</span></div>}</div>
             <div className="mt-5 flex items-end justify-between border-t border-dashed border-white/15 pt-5"><span className="text-sm">المجموع</span><strong className="text-xl text-[#dfc17c]">{money(total)}</strong></div>
-            <p className="mt-6 text-[10px] leading-5 text-[#605d58]">دخول الصالة: 40,000 د.ع للشخص. سعر السيارة ثابت للكرخ أو الرصافة. يخضع الحجز للتأكيد النهائي من فريقنا.</p>
+            <p className="mt-6 text-[10px] leading-5 text-[#605d58]">دخول الصالة: 40,000 د.ع للشخص. الأطفال دون سن 12 سنة مجانًا. سعر السيارة ثابت للكرخ أو الرصافة. يخضع الحجز للتأكيد النهائي من فريقنا.</p>
           </aside>
         </div>
       </div>
@@ -148,4 +149,5 @@ export function BookingExperience() {
 function StepTitle({eyebrow,title}:{eyebrow:string;title:string}) { return <div className="mb-7"><p className="text-[11px] text-[#a58b55]">{eyebrow}</p><h3 className="mt-2 text-xl sm:text-2xl">{title}</h3></div> }
 function Choice({active,onClick,icon,title,desc,badge}:{active:boolean;onClick:()=>void;icon:React.ReactNode;title:string;desc:string;badge?:string}) { return <button type="button" onClick={onClick} aria-pressed={active} className={`choice relative min-h-32 rounded-xl p-5 text-right ${active?"active":""}`}><span className={active?"text-[#daba73]":"text-[#777]"}>{icon}</span><span className="mt-4 block text-sm">{title}</span><span className="mt-2 block text-[11px] leading-5 text-[#77736d]">{desc}</span>{badge&&<span className="absolute left-3 top-3 rounded-full bg-[#c9a55c]/12 px-2 py-1 text-[9px] text-[#daba73]">{badge}</span>}</button> }
 function Field({label,children}:{label:string;children:React.ReactNode}) { return <label><span className="label">{label}</span>{children}</label> }
+function Counter({label,value,min,max,onChange}:{label:string;value:number;min:number;max:number;onChange:(value:number)=>void}) { return <div><span className="label">{label}</span><div className="flex h-12 items-center justify-between border border-white/10 bg-black/20 px-2"><button type="button" aria-label={`تقليل ${label}`} onClick={()=>onChange(Math.max(min,value-1))} disabled={value<=min} className="grid h-8 w-8 place-items-center rounded-full border border-white/10 text-[#c9a55c] disabled:opacity-25"><Minus size={15}/></button><span className="min-w-10 text-center font-[var(--font-latin)] text-base text-[#ddd6cb]">{value}</span><button type="button" aria-label={`زيادة ${label}`} onClick={()=>onChange(Math.min(max,value+1))} disabled={value>=max} className="grid h-8 w-8 place-items-center rounded-full border border-white/10 text-[#c9a55c] disabled:opacity-25"><Plus size={15}/></button></div></div> }
 function Summary({label,value,icon}:{label:string;value:string;icon?:React.ReactNode}) { return <div className="flex items-center justify-between gap-3"><span className="flex items-center gap-2 text-[#6f6b65]">{icon}{label}</span><span className="text-left text-[#c5bfb6]">{value}</span></div> }
