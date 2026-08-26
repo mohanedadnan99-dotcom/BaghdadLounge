@@ -111,7 +111,7 @@ export function BookingExperience({lang}:{lang:Lang}) {
               <StepTitle eyebrow={form.tripType==="arrival"?t.transportService:t.accessService} title={form.tripType==="arrival"?t.arrivalCarQ:t.departureCarQ} />
               <div className="grid gap-3 sm:grid-cols-2">
                 <Choice rtl={rtl} active={form.transport==="self"} onClick={()=>patch("transport","self")} icon={<Users/>} title={form.tripType==="arrival"?t.noThanks:t.self} desc={form.tripType==="arrival"?t.loungeOnly:t.selfDesc} />
-                <Choice rtl={rtl} active={form.transport==="chauffeur"} onClick={()=>patch("transport","chauffeur")} icon={<CarFront/>} title={t.privateCar} desc={form.tripType==="arrival"?t.arrivalCarDesc:t.departureCarDesc} badge={money(75000)} />
+                <Choice rtl={rtl} active={form.transport==="chauffeur"} onClick={()=>patch("transport","chauffeur")} icon={<CarFront/>} title={t.privateCar} desc={form.tripType==="arrival"?t.arrivalCarDesc:t.departureCarDesc} />
               </div>
               {form.transport==="chauffeur" && <div className="mt-6 grid gap-4 border-t border-white/8 pt-6 sm:grid-cols-2">
                 <Field label={t.side}><select className="field" value={form.side} onChange={e=>patch("side",e.target.value as FormState["side"])}><option value="karkh">{t.karkh}</option><option value="rusafa">{t.rusafa}</option></select></Field>
