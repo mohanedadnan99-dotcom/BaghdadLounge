@@ -1,27 +1,24 @@
 import { BookingExperience } from "@/components/booking-experience";
 import { ArrowDown, Clock3, Headphones, ShieldCheck } from "lucide-react";
 
-const loungeLogo = "https://lookaside.fbsbx.com/lookaside/crawler/media/?media_id=100076392487649";
+const loungeLogo = "https://scontent.fbgw12-1.fna.fbcdn.net/v/t39.30808-6/268797061_106349245244621_2135641784869740368_n.jpg?stp=dst-jpg_tt6&cstp=mx1200x1200&ctp=s1200x1200&_nc_cat=106&ccb=1-7&_nc_sid=6ee11a&_nc_ohc=do3U9gQAiiMQ7kNvwEhQEYt&_nc_oc=AdqXvsl9FCucLfdgWfVRYTENxt--k-YrPWw8cLhWL01k7qeXiZb9wyP9BK7S8d9N4ao&_nc_zt=23&_nc_ht=scontent.fbgw12-1.fna&_nc_gid=Rl-yXgLWW7kpDqI9lrKrYQ&_nc_ss=7b289&oh=00_AQE__icqwSJOrM6Gmc2ou1khWPbjMliMqr1FAN4_0NO5bw&oe=6A9522DE";
 
 export default function Home() {
   return (
     <main className="min-h-screen overflow-hidden bg-[#090909]">
       <section className="relative min-h-[100svh] flex items-end lg:items-center">
-        <div
-          className="absolute inset-0 bg-cover bg-[36%_center] lg:bg-center"
-          style={{ backgroundImage: "url('https://raw.githubusercontent.com/mohanedadnan99-dotcom/BaghdadLounge/main/public/lounge-baghdad-hero.jpg')" }}
-        />
+        <div className="absolute inset-0 bg-cover bg-[36%_center] lg:bg-center" style={{ backgroundImage: "url('https://raw.githubusercontent.com/mohanedadnan99-dotcom/BaghdadLounge/main/public/lounge-baghdad-hero.jpg')" }} />
         <div className="absolute inset-0 bg-gradient-to-t from-[#090909] via-black/50 to-black/25 lg:bg-gradient-to-l lg:from-black/90 lg:via-black/55 lg:to-black/10" />
         <div className="absolute inset-0 hero-noise" />
 
         <header className="absolute top-0 inset-x-0 z-10 flex items-center justify-between px-5 py-5 lg:px-14">
-          <div className="flex items-center gap-3">
-            <div className="h-14 w-14 overflow-hidden rounded-full border border-[#c9a55c]/50 bg-black/50 p-1 shadow-[0_0_30px_rgba(201,165,92,0.12)] sm:h-16 sm:w-16">
-              <img src={loungeLogo} alt="شعار لاونج بغداد" className="h-full w-full rounded-full object-cover" />
+          <div className="flex items-center gap-3 sm:gap-4">
+            <div className="h-[68px] w-[68px] shrink-0 overflow-hidden rounded-full border border-[#d6b56d]/70 bg-[#0b0b0b] p-[3px] shadow-[0_8px_35px_rgba(0,0,0,.5)] sm:h-[76px] sm:w-[76px]">
+              <img src={loungeLogo} alt="شعار لاونج بغداد" className="h-full w-full rounded-full object-cover object-center" />
             </div>
             <div className="leading-tight">
-              <div className="font-[var(--font-latin)] tracking-[.2em] text-sm sm:text-base">LOUNGE BAGHDAD</div>
-              <div className="text-[10px] text-[#aaa49b] mt-1">مطار بغداد الدولي</div>
+              <div className="font-[var(--font-latin)] tracking-[.18em] text-sm font-medium sm:text-base">LOUNGE BAGHDAD</div>
+              <div className="mt-1.5 text-[10px] text-[#b4aea4] sm:text-[11px]">مطار بغداد الدولي</div>
             </div>
           </div>
           <a href="#booking" className="hidden sm:block border border-[#c9a55c]/60 px-5 py-2.5 text-xs text-[#e5c987] hover:bg-[#c9a55c] hover:text-black transition">احجز الآن</a>
@@ -52,8 +49,8 @@ export default function Home() {
 
       <footer className="border-t border-white/7 px-5 py-8 text-center text-xs text-[#77736d]">
         <div className="mb-4 flex justify-center">
-          <div className="h-14 w-14 overflow-hidden rounded-full border border-[#c9a55c]/35 bg-black/40 p-1">
-            <img src={loungeLogo} alt="شعار لاونج بغداد" className="h-full w-full rounded-full object-cover" />
+          <div className="h-16 w-16 overflow-hidden rounded-full border border-[#c9a55c]/45 bg-[#0b0b0b] p-[3px] shadow-[0_8px_30px_rgba(0,0,0,.45)]">
+            <img src={loungeLogo} alt="شعار لاونج بغداد" className="h-full w-full rounded-full object-cover object-center" />
           </div>
         </div>
         <div className="mb-3 font-[var(--font-latin)] tracking-[.18em] text-[#c9a55c]">LOUNGE BAGHDAD</div>
