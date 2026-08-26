@@ -46,7 +46,8 @@ export type BookingInput = z.infer<typeof bookingSchema>;
 export function totals(booking: BookingInput) {
   const lounge = booking.passengers * 40000;
   const car = booking.transport === "chauffeur" ? 75000 : 0;
-  return { lounge, car, total: lounge + car };
+  const extraBaggage = booking.bags > 4 ? 10000 : 0;
+  return { lounge, car, extraBaggage, total: lounge + car + extraBaggage };
 }
 
 export function bookingReference() {
