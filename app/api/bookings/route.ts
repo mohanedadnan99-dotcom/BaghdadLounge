@@ -4,7 +4,10 @@ export const runtime = "nodejs";
 export async function POST(request: Request) {
   try {
     const parsed = bookingSchema.safeParse(await request.json());
-    if (!parsed.success) return Response.json({ error: "يرجى التأكد من جميع معلومات الحجز" }, { status: 400 });
+    if (!parsed.success) {
+      const firstIssue = parsed.error.issues[0]?.message;
+      return Response.json({ error: firstIssue || "يرجى التأكد من جميع معلومات الحجز" }, { status: 400 });
+    }
     const booking = parsed.data;
     const reference = bookingReference();
     const { total } = totals(booking);
