@@ -1,8 +1,8 @@
 import type { Metadata, Viewport } from "next";
-import { Noto_Kufi_Arabic, Manrope } from "next/font/google";
+import { Noto_Sans_Arabic, Manrope } from "next/font/google";
 import "./globals.css";
 
-const arabic = Noto_Kufi_Arabic({ subsets: ["arabic"], variable: "--font-arabic" });
+const arabic = Noto_Sans_Arabic({ subsets: ["arabic"], variable: "--font-arabic", weight: ["300", "400", "500", "600", "700"] });
 const latin = Manrope({ subsets: ["latin"], variable: "--font-latin" });
 
 export const metadata: Metadata = {
