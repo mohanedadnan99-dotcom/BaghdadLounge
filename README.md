@@ -17,3 +17,7 @@ npm run dev
 - `WAYL_WEBHOOK_SECRET`: مفتاح توقيع إشعارات Wayl.
 - `DATABASE_URL`: رابط Neon Postgres.
 - `NEXT_PUBLIC_SITE_URL`: رابط الموقع العام.
+- `OPENAI_API_KEY`: مفتاح OpenAI لقراءة صور وملفات PDF للتذاكر تلقائياً.
+- `OPENAI_TICKET_MODEL`: النموذج المستخدم لاستخراج البيانات (الافتراضي `gpt-5.6`).
+
+ميزة قراءة التذكرة تقبل JPG وPNG وWebP وPDF بحجم أقصى 10MB. تتم المعالجة من السيرفر ولا يُحفظ الملف في قاعدة بيانات الحجز.
