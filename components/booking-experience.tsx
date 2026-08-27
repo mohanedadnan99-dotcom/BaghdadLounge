@@ -72,31 +72,31 @@ export function BookingExperience({lang}:{lang:Lang}) {
   }
 
   if(result && !result.paymentUrl) return (
-    <section id="booking" dir={rtl?"rtl":"ltr"} className="bg-[#f4f0e9] px-5 py-20 text-[#f5f0e7] lg:px-14">
-      <div className="mx-auto max-w-xl overflow-hidden rounded-[2rem] border border-[#c9a55c]/35 bg-[#151613] p-8 text-center shadow-[0_30px_90px_rgba(30,27,20,.18)] sm:p-12">
-        <div className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-[#c9a55c] text-black"><Check size={30}/></div>
-        <p className="mt-6 text-xs text-[#c9a55c]">{t.successLabel}</p>
+    <section id="booking" dir={rtl?"rtl":"ltr"} className="bg-[#ded3bd] px-5 py-20 text-[#f5eddf] lg:px-14">
+      <div className="mx-auto max-w-xl overflow-hidden rounded-sm border border-[#b86f47]/35 bg-[#061827] p-8 text-center shadow-[0_30px_90px_rgba(6,24,39,.2)] sm:p-12">
+        <div className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-[#b86f47] text-white"><Check size={30}/></div>
+        <p className="mt-6 text-xs text-[#d99a72]">{t.successLabel}</p>
         <h2 className="mt-3 text-2xl">{t.successTitle}</h2>
         <p className="mt-4 text-sm leading-7 text-[#98938b]">{t.successText}</p>
-        <div className="mt-6 border border-dashed border-[#c9a55c]/45 bg-black/30 px-5 py-4 font-[var(--font-latin)] text-xl tracking-widest text-[#e5c987]">{result.reference}</div>
+        <div className="mt-6 border border-dashed border-[#d99a72]/45 bg-black/20 px-5 py-4 font-[var(--font-latin)] text-xl tracking-widest text-[#e8deca]">{result.reference}</div>
       </div>
     </section>
   );
 
   return (
-    <section id="booking" dir={rtl?"rtl":"ltr"} className="booking-section relative bg-[#f4f0e9] px-5 py-20 text-[#171814] lg:px-14 lg:py-28">
+    <section id="booking" dir={rtl?"rtl":"ltr"} className="booking-section relative bg-[#ded3bd] px-5 py-20 text-[#061827] lg:px-14 lg:py-28">
       <div className="booking-pattern absolute inset-0" />
       <div className="relative mx-auto max-w-5xl">
         <div className="mb-12 text-center">
-          <p className="text-[10px] tracking-[.16em] text-[#9a793d]">{t.bookingSimple}</p>
-          <h2 className="mt-4 text-3xl font-medium tracking-[-.03em] sm:text-5xl">{t.arrange}</h2>
-          <p className="mx-auto mt-5 max-w-lg text-sm leading-7 text-[#777168]">{t.bookingIntro}</p>
+          <p className="font-[var(--font-latin)] text-[9px] tracking-[.18em] text-[#a65f3c]">LB · BUSINESS CLASS RESERVATION</p>
+          <h2 className="mt-4 text-3xl font-medium tracking-[-.03em] text-[#061827] sm:text-5xl">{t.arrange}</h2>
+          <p className="mx-auto mt-5 max-w-lg text-sm leading-7 text-[#6f685e]">{t.bookingIntro}</p>
         </div>
 
-        <div className="booking-shell grid overflow-hidden rounded-[1.75rem] border border-black/10 bg-[#151613] text-[#f5f0e7] shadow-[0_35px_100px_rgba(37,32,22,.18)] lg:grid-cols-[1fr_340px]">
+        <div className="booking-shell grid overflow-hidden rounded-sm bg-[#061827] text-[#f5eddf] lg:grid-cols-[1fr_340px]">
           <div className="p-5 sm:p-8 lg:p-10">
             <div className="mb-9 flex items-center gap-2">
-              {[1,2,3,4].map(n=><div key={n} className="flex flex-1 items-center gap-2"><span className={`grid h-7 w-7 shrink-0 place-items-center rounded-full text-[11px] ${step>=n?"bg-[#c9a55c] text-black":"border border-white/15 text-[#777]"}`}>{step>n?<Check size={13}/>:n}</span>{n<4&&<span className={`h-px flex-1 ${step>n?"bg-[#c9a55c]":"bg-white/10"}`}/>}</div>)}
+              {[1,2,3,4].map(n=><div key={n} className="flex flex-1 items-center gap-2"><span className={`grid h-7 w-7 shrink-0 place-items-center rounded-full text-[11px] ${step>=n?"bg-[#b86f47] text-white":"border border-white/15 text-[#708793]"}`}>{step>n?<Check size={13}/>:n}</span>{n<4&&<span className={`h-px flex-1 ${step>n?"bg-[#b86f47]":"bg-white/10"}`}/>}</div>)}
             </div>
 
             {step===1 && <div>
@@ -133,7 +133,7 @@ export function BookingExperience({lang}:{lang:Lang}) {
                   <Counter label={t.bags} value={form.bags} min={0} max={40} onChange={value=>patch("bags",value)} />
                 </div>
                 <p className="sm:col-span-2 -mt-2 text-[11px] text-[#8f897f]">{t.kids}</p>
-                {form.bags > 4 && <div className="sm:col-span-2 -mt-2 border border-[#c9a55c]/25 bg-[#c9a55c]/5 px-4 py-3 text-[11px] leading-6 text-[#cdbb94]">{t.extraBags}</div>}
+                {form.bags > 4 && <div className="sm:col-span-2 -mt-2 border border-[#d99a72]/25 bg-[#b86f47]/5 px-4 py-3 text-[11px] leading-6 text-[#d6b59f]">{t.extraBags}</div>}
                 <div className="sm:col-span-2"><Field label={t.notes}><textarea className="field min-h-24 resize-none" placeholder={t.notesPlaceholder} value={form.notes} onChange={e=>patch("notes",e.target.value)}/></Field></div>
               </div>
             </div>}
@@ -149,12 +149,12 @@ export function BookingExperience({lang}:{lang:Lang}) {
 
             <div className="mt-10 flex items-center justify-between border-t border-white/8 pt-6">
               <button type="button" onClick={()=>setStep(s=>Math.max(1,s-1))} disabled={step===1} className="flex items-center gap-2 px-3 py-2 text-sm text-[#888] disabled:invisible">{rtl?<ArrowRight size={16}/>:<ArrowLeft size={16}/>} {t.back}</button>
-              {step<4?<button type="button" disabled={!canContinue} onClick={()=>setStep(s=>Math.min(4,s+1))} className="flex items-center gap-2 bg-[#c9a55c] px-6 py-3 text-sm font-semibold text-black disabled:cursor-not-allowed disabled:opacity-40">{t.next} {rtl?<ArrowLeft size={16}/>:<ArrowRight size={16}/>}</button>:<button type="button" onClick={submit} disabled={loading} className="flex min-w-40 items-center justify-center gap-2 bg-[#c9a55c] px-6 py-3 text-sm font-semibold text-black disabled:opacity-60">{loading?<><Loader2 size={17} className="animate-spin"/> {t.bookingNow}</>:t.booking}</button>}
+              {step<4?<button type="button" disabled={!canContinue} onClick={()=>setStep(s=>Math.min(4,s+1))} className="flex items-center gap-2 bg-[#b86f47] px-6 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40">{t.next} {rtl?<ArrowLeft size={16}/>:<ArrowRight size={16}/>}</button>:<button type="button" onClick={submit} disabled={loading} className="flex min-w-40 items-center justify-center gap-2 bg-[#b86f47] px-6 py-3 text-sm font-semibold text-white disabled:opacity-60">{loading?<><Loader2 size={17} className="animate-spin"/> {t.bookingNow}</>:t.booking}</button>}
             </div>
           </div>
 
-          <aside className={`booking-summary border-t border-white/10 bg-[#0d0e0c] p-6 lg:border-t-0 lg:p-8 ${rtl?"lg:border-r":"lg:border-l"}`}>
-            <p className="text-[11px] tracking-[.12em] text-[#c9a55c]">{t.summary}</p>
+          <aside className={`booking-summary border-t border-white/10 bg-[#04131f] p-6 lg:border-t-0 lg:p-8 ${rtl?"lg:border-r":"lg:border-l"}`}>
+            <p className="text-[11px] tracking-[.12em] text-[#d99a72]">{t.summary}</p>
             <h3 className="mt-3 text-xl">{t.experience}</h3>
             <div className="mt-7 space-y-4 text-sm">
               <Summary label={t.tripType} value={form.tripType==="departure"?t.departure:t.arrival}/>
@@ -169,7 +169,7 @@ export function BookingExperience({lang}:{lang:Lang}) {
               {carTotal>0&&<div className="flex justify-between gap-4"><span>{t.car}</span><span>{money(carTotal)}</span></div>}
               {extraBaggageTotal>0&&<div className="flex justify-between gap-4"><span>{t.extraBagService}</span><span>{money(extraBaggageTotal)}</span></div>}
             </div>
-            <div className="mt-5 flex items-end justify-between gap-4 border-t border-dashed border-white/15 pt-5"><span className="text-sm">{t.total}</span><strong className="text-xl text-[#dfc17c]">{money(total)}</strong></div>
+            <div className="mt-5 flex items-end justify-between gap-4 border-t border-dashed border-white/15 pt-5"><span className="text-sm">{t.total}</span><strong className="text-xl text-[#d99a72]">{money(total)}</strong></div>
             <p className="mt-6 text-[10px] leading-5 text-[#605d58]">{t.footerNote}</p>
           </aside>
         </div>
@@ -178,8 +178,8 @@ export function BookingExperience({lang}:{lang:Lang}) {
   );
 }
 
-function StepTitle({eyebrow,title}:{eyebrow:string;title:string}) { return <div className="mb-7"><p className="text-[11px] text-[#a58b55]">{eyebrow}</p><h3 className="mt-2 text-xl sm:text-2xl">{title}</h3></div> }
-function Choice({active,onClick,icon,title,desc,badge,rtl}:{active:boolean;onClick:()=>void;icon:React.ReactNode;title:string;desc:string;badge?:string;rtl:boolean}) { return <button type="button" onClick={onClick} aria-pressed={active} className={`choice relative min-h-32 rounded-xl p-5 ${rtl?"text-right":"text-left"} ${active?"active":""}`}><span className={active?"text-[#daba73]":"text-[#777]"}>{icon}</span><span className="mt-4 block text-sm">{title}</span><span className="mt-2 block text-[11px] leading-5 text-[#77736d]">{desc}</span>{badge&&<span className={`absolute top-3 rounded-full bg-[#c9a55c]/12 px-2 py-1 text-[9px] text-[#daba73] ${rtl?"left-3":"right-3"}`}>{badge}</span>}</button> }
+function StepTitle({eyebrow,title}:{eyebrow:string;title:string}) { return <div className="mb-7"><p className="text-[11px] text-[#c6815d]">{eyebrow}</p><h3 className="mt-2 text-xl sm:text-2xl">{title}</h3></div> }
+function Choice({active,onClick,icon,title,desc,badge,rtl}:{active:boolean;onClick:()=>void;icon:React.ReactNode;title:string;desc:string;badge?:string;rtl:boolean}) { return <button type="button" onClick={onClick} aria-pressed={active} className={`choice relative min-h-32 rounded-sm p-5 ${rtl?"text-right":"text-left"} ${active?"active":""}`}><span className={active?"text-[#d99a72]":"text-[#708793]"}>{icon}</span><span className="mt-4 block text-sm">{title}</span><span className="mt-2 block text-[11px] leading-5 text-[#7d919b]">{desc}</span>{badge&&<span className={`absolute top-3 rounded-full bg-[#b86f47]/12 px-2 py-1 text-[9px] text-[#d99a72] ${rtl?"left-3":"right-3"}`}>{badge}</span>}</button> }
 function Field({label,children}:{label:string;children:React.ReactNode}) { return <label><span className="label">{label}</span>{children}</label> }
-function Counter({label,value,min,max,onChange}:{label:string;value:number;min:number;max:number;onChange:(value:number)=>void}) { return <div><span className="label">{label}</span><div className="flex h-12 items-center justify-between border border-white/10 bg-black/20 px-2"><button type="button" aria-label={`Decrease ${label}`} onClick={()=>onChange(Math.max(min,value-1))} disabled={value<=min} className="grid h-8 w-8 place-items-center rounded-full border border-white/10 text-[#c9a55c] disabled:opacity-25"><Minus size={15}/></button><span className="min-w-10 text-center font-[var(--font-latin)] text-base text-[#ddd6cb]">{value}</span><button type="button" aria-label={`Increase ${label}`} onClick={()=>onChange(Math.min(max,value+1))} disabled={value>=max} className="grid h-8 w-8 place-items-center rounded-full border border-white/10 text-[#c9a55c] disabled:opacity-25"><Plus size={15}/></button></div></div> }
+function Counter({label,value,min,max,onChange}:{label:string;value:number;min:number;max:number;onChange:(value:number)=>void}) { return <div><span className="label">{label}</span><div className="flex h-12 items-center justify-between border border-white/10 bg-[#071c2b] px-2"><button type="button" aria-label={`Decrease ${label}`} onClick={()=>onChange(Math.max(min,value-1))} disabled={value<=min} className="grid h-8 w-8 place-items-center rounded-full border border-white/10 text-[#d99a72] disabled:opacity-25"><Minus size={15}/></button><span className="min-w-10 text-center font-[var(--font-latin)] text-base text-[#ddd6cb]">{value}</span><button type="button" aria-label={`Increase ${label}`} onClick={()=>onChange(Math.min(max,value+1))} disabled={value>=max} className="grid h-8 w-8 place-items-center rounded-full border border-white/10 text-[#d99a72] disabled:opacity-25"><Plus size={15}/></button></div></div> }
 function Summary({label,value,icon}:{label:string;value:string;icon?:React.ReactNode}) { return <div className="flex items-center justify-between gap-3"><span className="flex items-center gap-2 text-[#6f6b65]">{icon}{label}</span><span className="text-[#c5bfb6]">{value}</span></div> }
