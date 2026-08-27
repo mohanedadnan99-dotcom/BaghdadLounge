@@ -3,34 +3,36 @@
 import Image from "next/image";
 import { useState } from "react";
 import { BookingExperience } from "@/components/booking-experience";
-import { ArrowDownLeft, ArrowUpLeft, Clock3, Headphones, ShieldCheck } from "lucide-react";
+import { ArrowDownLeft, Clock3, Headphones, ShieldCheck } from "lucide-react";
 
 type Lang = "ar" | "en";
 
 const copy = {
   ar: {
-    airport: "مطار بغداد الدولي", book: "الحجز", switch: "EN",
-    overline: "تجربة ما قبل السفر، بمستوى آخر", line1: "ما قبل الرحلة،", line2: "يستحق أن يكون أجمل.",
-    intro: "صالة راقية وخدمة توصيل خاصة من وإلى مطار بغداد الدولي. نهتم بالتفاصيل، حتى تبدأ رحلتك بهدوء يليق بك.",
-    cta: "احجز تجربتك", open: "متوفرون على مدار 24 ساعة", code: "بغداد · العراق", imageCaption: "هنا تبدأ الرحلة بهدوء",
-    pillars: [["01", "صالة راقية", "راحة وخصوصية قبل الرحلة"], ["02", "توصيل خاص", "من وإلى مطار بغداد الدولي"], ["03", "خدمة مستمرة", "فريقنا متوفر على مدار الساعة"]],
-    promise: "خصوصية. عناية. راحة.", rights: "جميع الحقوق محفوظة",
+    airport: "مطار بغداد الدولي", booking: "الحجز", switch: "EN", eyebrow: "ضيافة خاصة في مطار بغداد الدولي",
+    title1: "بوابتك إلى", title2: "تجربة سفر أهدأ", intro: "من الصالة الراقية إلى التوصيل الخاص، نصمّم لك بداية أكثر هدوءاً وخصوصية لكل رحلة.",
+    cta: "احجز تجربتك", available: "خدمتنا متاحة 24 ساعة", caption: "راحة تبدأ قبل الإقلاع", location: "بغداد · العراق",
+    services: [["01", "الصالة", "هدوء وخصوصية قبل الرحلة"], ["02", "التوصيل", "سيارة خاصة من وإلى المطار"], ["03", "العناية", "فريق متوفر على مدار الساعة"]],
+    manifesto: "السفر يبدأ من اللحظة التي تصل بها إلى المطار. نحن نجعل هذه اللحظة أجمل.", rights: "جميع الحقوق محفوظة",
   },
   en: {
-    airport: "Baghdad International Airport", book: "Booking", switch: "العربية",
-    overline: "A DIFFERENT CLASS OF PRE-FLIGHT", line1: "Before the flight,", line2: "there is Lounge Baghdad.",
-    intro: "A refined lounge and private transfer service to and from Baghdad International Airport. Every detail is arranged for a calmer journey.",
-    cta: "Book your experience", open: "Available 24 hours a day", code: "Baghdad · Iraq", imageCaption: "Your journey begins in calm",
-    pillars: [["01", "Refined lounge", "Privacy and comfort before the flight"], ["02", "Private transfer", "To and from Baghdad International Airport"], ["03", "Always available", "Our team is ready around the clock"]],
-    promise: "Privacy. Care. Comfort.", rights: "All rights reserved",
+    airport: "Baghdad International Airport", booking: "Booking", switch: "العربية", eyebrow: "PRIVATE HOSPITALITY AT BAGHDAD AIRPORT",
+    title1: "Your gateway to", title2: "a calmer journey", intro: "From a refined lounge to private transfers, we shape a quieter and more personal beginning to every journey.",
+    cta: "Book your experience", available: "Available 24 hours", caption: "Comfort begins before takeoff", location: "Baghdad · Iraq",
+    services: [["01", "The lounge", "Calm and privacy before the flight"], ["02", "The transfer", "Private transport to and from the airport"], ["03", "The care", "A team available around the clock"]],
+    manifesto: "Travel begins the moment you reach the airport. We make that moment better.", rights: "All rights reserved",
   },
 } as const;
 
-function Signature({ light = false }: { light?: boolean }) {
+function GateLogo({ dark = false }: { dark?: boolean }) {
   return (
-    <div className={`signature ${light ? "signature-light" : ""}`} aria-label="Lounge Baghdad">
-      <div className="signature-symbol"><span>L</span><span>B</span></div>
-      <div className="signature-copy"><strong>LOUNGE</strong><strong>BAGHDAD</strong></div>
+    <div className={`gate-brand ${dark ? "gate-brand-dark" : ""}`} aria-label="Lounge Baghdad">
+      <svg className="gate-mark" viewBox="0 0 64 64" role="img" aria-label="LB airport gate mark">
+        <path className="gate-outline" d="M8 58V20C8 11.2 15.2 4 24 4h16c8.8 0 16 7.2 16 16v38" />
+        <path className="gate-runway" d="M32 4v54M22 58V20h10M42 28c6 0 10 3 10 8s-4 8-10 8H32M42 44c7 0 12 2.7 12 7s-5 7-12 7H32" />
+        <path className="gate-threshold" d="M3 58h58" />
+      </svg>
+      <div className="gate-wordmark"><strong>LOUNGE</strong><strong>BAGHDAD</strong><span>PRIVATE AIRPORT HOSPITALITY</span></div>
     </div>
   );
 }
@@ -42,52 +44,59 @@ export default function Home() {
 
   return (
     <main lang={lang} dir={rtl ? "rtl" : "ltr"} className={rtl ? "font-[var(--font-arabic)]" : "font-[var(--font-latin)]"}>
-      <section className="brand-hero" id="top">
-        <header className="brand-header">
-          <a href="#top"><Signature /></a>
-          <div className="brand-nav">
-            <span className="hidden text-[10px] text-white/45 md:block">{t.airport}</span>
+      <section className="baghdad-hero" id="top">
+        <div className="baghdad-grid" aria-hidden="true" />
+        <header className="baghdad-header">
+          <a href="#top"><GateLogo /></a>
+          <nav className="baghdad-nav" aria-label={rtl ? "التنقل الرئيسي" : "Main navigation"}>
+            <span className="nav-airport">{t.airport}</span>
             <button type="button" onClick={() => setLang(lang === "ar" ? "en" : "ar")} className="language-switch" aria-label={rtl ? "Switch to English" : "التبديل إلى العربية"}>{t.switch}</button>
-            <a href="#booking" className="header-book">{t.book}<ArrowDownLeft size={14} /></a>
-          </div>
+            <a href="#booking" className="nav-book">{t.booking}<span><ArrowDownLeft size={14} /></span></a>
+          </nav>
         </header>
 
-        <div className="hero-watermark" aria-hidden="true">LOUNGE</div>
-        <div className="hero-image-wrap">
-          <Image src="/lounge-baghdad-hero.jpg" alt={rtl ? "صالة لاونج بغداد" : "Lounge Baghdad interior"} fill priority sizes="(max-width: 900px) 100vw, 68vw" className="object-cover object-center" />
-          <div className="hero-image-shade" />
-          <div className="image-caption"><span />{t.imageCaption}</div>
-        </div>
+        <div className="hero-layout">
+          <div className="hero-copy">
+            <div className="hero-eyebrow"><span>LB</span><i />{t.eyebrow}</div>
+            <h1>{t.title1}<em>{t.title2}</em></h1>
+            <p className="hero-intro">{t.intro}</p>
+            <div className="hero-actions">
+              <a href="#booking" className="copper-button">{t.cta}<span><ArrowDownLeft size={17} /></span></a>
+              <p><Clock3 size={15} />{t.available}</p>
+            </div>
+            <div className="hero-route" aria-hidden="true"><b>BGW</b><span /><small>LOUNGE BAGHDAD</small></div>
+          </div>
 
-        <div className="airport-code" aria-label="Baghdad airport code"><b>BGW</b><span>{t.code}</span></div>
-
-        <div className="hero-statement">
-          <p className="statement-overline"><span />{t.overline}</p>
-          <h1><span>{t.line1}</span><em>{t.line2}</em></h1>
-          <p className="statement-copy">{t.intro}</p>
-          <div className="statement-actions">
-            <a href="#booking" className="primary-book"><span>{t.cta}</span><i><ArrowUpLeft size={17} /></i></a>
-            <p><Clock3 size={14} />{t.open}</p>
+          <div className="architectural-visual">
+            <div className="visual-frame">
+              <Image src="/lounge-baghdad-hero.jpg" alt={rtl ? "صالة لاونج بغداد الفاخرة" : "Lounge Baghdad premium interior"} fill priority sizes="(max-width: 900px) 100vw, 54vw" className="object-cover object-center" />
+              <div className="visual-shade" />
+              <div className="visual-caption"><i />{t.caption}</div>
+            </div>
+            <div className="visual-copper-corner" aria-hidden="true" />
+            <div className="bgw-stamp"><small>IATA</small><b>BGW</b><span>{t.location}</span></div>
           </div>
         </div>
-
-        <div className="hero-index" aria-hidden="true"><span>LOUNGE BAGHDAD</span><i /><b>01</b></div>
       </section>
 
-      <section className="brand-pillars" aria-label={rtl ? "مزايا الخدمة" : "Service features"}>
-        <div className="pillars-inner">
-          {t.pillars.map(([number, title, description], index) => {
+      <section className="service-ribbon">
+        <div className="service-ribbon-inner">
+          {t.services.map(([number, title, description], index) => {
             const Icon = [ShieldCheck, Headphones, Clock3][index];
-            return <article key={number}><span className="pillar-number">{number}</span><Icon size={20} strokeWidth={1.5} /><div><h2>{title}</h2><p>{description}</p></div></article>;
+            return <article key={number}><span>{number}</span><Icon size={21} strokeWidth={1.45} /><div><h2>{title}</h2><p>{description}</p></div></article>;
           })}
         </div>
       </section>
 
+      <section className="brand-manifesto">
+        <span aria-hidden="true">LB</span><p>{t.manifesto}</p><i aria-hidden="true">BGW / IQ</i>
+      </section>
+
       <BookingExperience lang={lang} />
 
-      <footer className="brand-footer">
-        <div className="footer-top"><Signature light /><p>{t.promise}</p></div>
-        <div className="footer-bottom"><span>BGW · IRAQ</span><span>{t.rights} © {new Date().getFullYear()}</span></div>
+      <footer className="baghdad-footer">
+        <div className="footer-brand"><GateLogo dark /><p>{rtl ? "بوابتك إلى تجربة سفر أهدأ" : "Your gateway to a calmer journey"}</p></div>
+        <div className="footer-meta"><span>BGW · BAGHDAD · IRAQ</span><span>{t.rights} © {new Date().getFullYear()}</span></div>
       </footer>
     </main>
   );
