@@ -1,11 +1,11 @@
 @import "tailwindcss";
 
 :root {
-  --gold: #c9a55c;
-  --gold-light: #ecd49f;
-  --ink: #090909;
-  --card: #121212;
-  --muted: #a7a29a;
+  --gold: #c6a367;
+  --gold-light: #ead7ae;
+  --ink: #10110f;
+  --card: #151613;
+  --muted: #aaa49a;
 }
 
 * { box-sizing: border-box; }
@@ -16,27 +16,49 @@ body {
   color: #f6f2e9;
   font-family: var(--font-arabic), sans-serif;
 }
+a { color: inherit; text-decoration: none; }
 button, input, select, textarea { font: inherit; }
 button { cursor: pointer; }
 ::selection { background: var(--gold); color: #090909; }
+
+.brand-mark {
+  position: relative; display: grid; height: 46px; width: 46px; flex: none; place-items: center;
+  border: 1px solid rgba(232,213,173,.5); border-radius: 50%; color: #ead7ae;
+  font-family: var(--font-latin), sans-serif; letter-spacing: .08em;
+}
+.brand-mark i { position: absolute; right: 3px; bottom: 3px; height: 7px; width: 7px; border-radius: 50%; background: #d4b77e; box-shadow: 0 0 0 3px #10110f; }
+.nav-pill { border: 1px solid rgba(255,255,255,.14); border-radius: 999px; background: rgba(255,255,255,.04); padding: 11px 14px; color: #d9bc83; font-size: 10px; transition: .2s; }
+.nav-pill:hover { border-color: rgba(217,188,131,.55); background: rgba(217,188,131,.08); }
+.hero-kicker { display: flex; align-items: center; gap: 9px; color: #cbb17f; font-size: 10px; letter-spacing: .13em; }
 
 .hero-noise {
   background-image: radial-gradient(circle at 15% 20%, rgba(201,165,92,.12), transparent 32%),
     radial-gradient(circle at 80% 80%, rgba(201,165,92,.08), transparent 30%);
 }
+.booking-pattern { opacity: .45; background-image: radial-gradient(rgba(18,19,16,.15) .7px, transparent .7px); background-size: 16px 16px; mask-image: linear-gradient(to bottom, black, transparent 68%); }
 .gold-text {
   background: linear-gradient(110deg, #a9823e, #f1d79d 48%, #b88d43);
   -webkit-background-clip: text;
   color: transparent;
 }
 .field {
-  width: 100%; border: 1px solid #34312d; background: #0d0d0d; color: #f8f5ed;
-  border-radius: 12px; padding: 13px 14px; outline: none; transition: .2s;
+  width: 100%; min-height: 50px; border: 1px solid #393934; background: #10110f; color: #f8f5ed;
+  border-radius: 14px; padding: 13px 14px; outline: none; transition: .2s;
 }
 .field:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(201,165,92,.12); }
 .field::placeholder { color: #69655f; }
 .field option { background: #111; }
 .label { display: block; margin-bottom: 8px; color: #d7d0c4; font-size: 13px; }
-.choice { border: 1px solid #302e2a; background: #111; transition: .2s; }
+.choice { border: 1px solid #35352f; background: #11120f; transition: transform .2s, border-color .2s, background .2s; }
 .choice:hover { border-color: #64573c; }
-.choice.active { border-color: var(--gold); background: rgba(201,165,92,.09); box-shadow: inset 0 0 0 1px rgba(201,165,92,.15); }
+.choice.active { border-color: var(--gold); background: rgba(201,165,92,.085); box-shadow: inset 0 0 0 1px rgba(201,165,92,.12); }
+.choice:active { transform: scale(.99); }
+
+@media (max-width: 1023px) {
+  .booking-summary { border-radius: 0 0 1.75rem 1.75rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+}
