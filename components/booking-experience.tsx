@@ -72,8 +72,8 @@ export function BookingExperience({lang}:{lang:Lang}) {
   }
 
   if(result && !result.paymentUrl) return (
-    <section id="booking" dir={rtl?"rtl":"ltr"} className="px-5 py-20 lg:px-14">
-      <div className="mx-auto max-w-xl border border-[#c9a55c]/35 bg-[#10100f] p-8 text-center sm:p-12">
+    <section id="booking" dir={rtl?"rtl":"ltr"} className="bg-[#f4f0e9] px-5 py-20 text-[#f5f0e7] lg:px-14">
+      <div className="mx-auto max-w-xl overflow-hidden rounded-[2rem] border border-[#c9a55c]/35 bg-[#151613] p-8 text-center shadow-[0_30px_90px_rgba(30,27,20,.18)] sm:p-12">
         <div className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-[#c9a55c] text-black"><Check size={30}/></div>
         <p className="mt-6 text-xs text-[#c9a55c]">{t.successLabel}</p>
         <h2 className="mt-3 text-2xl">{t.successTitle}</h2>
@@ -84,16 +84,16 @@ export function BookingExperience({lang}:{lang:Lang}) {
   );
 
   return (
-    <section id="booking" dir={rtl?"rtl":"ltr"} className="relative px-5 py-20 lg:px-14 lg:py-28">
-      <div className="absolute inset-0 hero-noise opacity-60" />
+    <section id="booking" dir={rtl?"rtl":"ltr"} className="booking-section relative bg-[#f4f0e9] px-5 py-20 text-[#171814] lg:px-14 lg:py-28">
+      <div className="booking-pattern absolute inset-0" />
       <div className="relative mx-auto max-w-5xl">
         <div className="mb-12 text-center">
-          <p className="text-xs tracking-[.15em] text-[#c9a55c]">{t.bookingSimple}</p>
-          <h2 className="mt-4 text-3xl sm:text-4xl">{t.arrange}</h2>
-          <p className="mx-auto mt-4 max-w-lg text-sm leading-7 text-[#88847e]">{t.bookingIntro}</p>
+          <p className="text-[10px] tracking-[.16em] text-[#9a793d]">{t.bookingSimple}</p>
+          <h2 className="mt-4 text-3xl font-medium tracking-[-.03em] sm:text-5xl">{t.arrange}</h2>
+          <p className="mx-auto mt-5 max-w-lg text-sm leading-7 text-[#777168]">{t.bookingIntro}</p>
         </div>
 
-        <div className="grid overflow-hidden border border-white/10 bg-[#101010] shadow-2xl shadow-black lg:grid-cols-[1fr_330px]">
+        <div className="booking-shell grid overflow-hidden rounded-[1.75rem] border border-black/10 bg-[#151613] text-[#f5f0e7] shadow-[0_35px_100px_rgba(37,32,22,.18)] lg:grid-cols-[1fr_340px]">
           <div className="p-5 sm:p-8 lg:p-10">
             <div className="mb-9 flex items-center gap-2">
               {[1,2,3,4].map(n=><div key={n} className="flex flex-1 items-center gap-2"><span className={`grid h-7 w-7 shrink-0 place-items-center rounded-full text-[11px] ${step>=n?"bg-[#c9a55c] text-black":"border border-white/15 text-[#777]"}`}>{step>n?<Check size={13}/>:n}</span>{n<4&&<span className={`h-px flex-1 ${step>n?"bg-[#c9a55c]":"bg-white/10"}`}/>}</div>)}
@@ -153,7 +153,7 @@ export function BookingExperience({lang}:{lang:Lang}) {
             </div>
           </div>
 
-          <aside className={`border-t border-white/10 bg-[#0b0b0b] p-6 lg:border-t-0 lg:p-8 ${rtl?"lg:border-r":"lg:border-l"}`}>
+          <aside className={`booking-summary border-t border-white/10 bg-[#0d0e0c] p-6 lg:border-t-0 lg:p-8 ${rtl?"lg:border-r":"lg:border-l"}`}>
             <p className="text-[11px] tracking-[.12em] text-[#c9a55c]">{t.summary}</p>
             <h3 className="mt-3 text-xl">{t.experience}</h3>
             <div className="mt-7 space-y-4 text-sm">
