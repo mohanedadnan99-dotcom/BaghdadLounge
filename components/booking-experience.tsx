@@ -1,19 +1,20 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ArrowLeft, ArrowRight, Banknote, CarFront, Check, CreditCard, Loader2, Luggage, Minus, PlaneLanding, PlaneTakeoff, Plus, Users } from "lucide-react";
+import { ArrowLeft, ArrowRight, Banknote, CarFront, Check, CreditCard, FileText, Loader2, Luggage, Minus, PlaneLanding, PlaneTakeoff, Plus, Upload, Users } from "lucide-react";
+import { BAGHDAD_AIRLINES, OTHER_AIRLINE } from "@/lib/airlines";
 
 type Lang = "ar" | "en";
 type FormState = {
   tripType: "departure" | "arrival";
   transport: "self" | "chauffeur";
   side: "karkh" | "rusafa";
-  name: string; phone: string; flightNumber: string; date: string; time: string;
+  name: string; phone: string; airline: string; flightNumber: string; date: string; time: string;
   passengers: number; bags: number; address: string; landmark: string; notes: string;
   payment: "cash" | "wayl";
 };
 
-const initial: FormState = { tripType:"departure", transport:"self", side:"karkh", name:"", phone:"", flightNumber:"", date:"", time:"", passengers:1, bags:0, address:"", landmark:"", notes:"", payment:"cash" };
+const initial: FormState = { tripType:"departure", transport:"self", side:"karkh", name:"", phone:"", airline:"", flightNumber:"", date:"", time:"", passengers:1, bags:0, address:"", landmark:"", notes:"", payment:"cash" };
 
 const copy = {
   ar: {
@@ -22,7 +23,8 @@ const copy = {
     stepOne:"الخطوة الأولى", tripQuestion:"ما نوع رحلتك؟", departure:"مغادرة من المطار", departureDesc:"ترتيب وصولك ودخولك إلى الصالة قبل السفر", arrival:"استقبال من المطار", arrivalDesc:"استقبالك بعد الوصول وتجربة أكثر راحة",
     transportService:"خدمة التوصيل", arrivalCarQ:"هل تحتاج سيارة توصلك بعد الوصول؟", accessService:"خدمة الوصول", departureCarQ:"كيف ستصل إلى المطار؟", noThanks:"لا، شكرًا", loungeOnly:"أحتاج حجز الصالة فقط بدون سيارة", self:"سأصل بنفسي", selfDesc:"أصل إلى المطار بسيارتي أو مع شخص آخر", privateCar:"أحتاج سيارة خاصة", arrivalCarDesc:"سيارة خاصة تستقبلك من المطار وتوصلك إلى وجهتك", departureCarDesc:"سيارة مريحة توصلك من موقعك إلى المطار",
     side:"الجانب", karkh:"الكرخ", rusafa:"الرصافة", deliveryAddress:"عنوان التوصيل", fullAddress:"العنوان الكامل", addressPlaceholder:"المنطقة، الشارع، المحلة", landmark:"أقرب نقطة دالة (اختياري)", landmarkPlaceholder:"مثال: قرب المستشفى...",
-    travelerDetails:"تفاصيل المسافر", enterDetails:"أدخل معلومات رحلتك", fullName:"الاسم الكامل", namePlaceholder:"الاسم الثلاثي", phone:"رقم الهاتف", flight:"رقم الرحلة", flightPlaceholder:"مثال: IA123", arrivalDate:"تاريخ الوصول", departureDate:"تاريخ المغادرة", arrivalTime:"وقت الوصول المتوقع", departureTime:"وقت الحضور المطلوب", passengers:"عدد المسافرين", bags:"عدد الحقائب", kids:"* الأطفال دون سن 12 سنة دخولهم مجانًا.", extraBags:"لديك أكثر من 4 حقائب، لذلك تُضاف رسوم خدمة قدرها 10,000 د.ع لتوفير عربة إضافية وعامل للمساعدة بالحقائب.", notes:"ملاحظات إضافية (اختياري)", notesPlaceholder:"أي تفاصيل تساعدنا في ترتيب تجربتك...",
+    travelerDetails:"تفاصيل المسافر", enterDetails:"أدخل معلومات رحلتك", fullName:"الاسم الكامل", namePlaceholder:"الاسم الثلاثي", phone:"رقم الهاتف", airline:"شركة الطيران", selectAirline:"اختر شركة الطيران", otherAirline:"شركة طيران أخرى", flight:"رقم الرحلة", flightPlaceholder:"مثال: IA123", arrivalDate:"تاريخ الوصول", departureDate:"تاريخ المغادرة", arrivalTime:"وقت الوصول المتوقع", departureTime:"وقت الحضور المطلوب", passengers:"عدد المسافرين", bags:"عدد الحقائب", kids:"* الأطفال دون سن 12 سنة دخولهم مجانًا.", extraBags:"لديك أكثر من 4 حقائب، لذلك تُضاف رسوم خدمة قدرها 10,000 د.ع لتوفير عربة إضافية وعامل للمساعدة بالحقائب.", notes:"ملاحظات إضافية (اختياري)", notesPlaceholder:"أي تفاصيل تساعدنا في ترتيب تجربتك...",
+    uploadTitle:"عندك تذكرة جاهزة؟", uploadText:"ارفع صورة التذكرة أو ملف PDF ونعبّي معلومات الرحلة تلقائياً.", uploadButton:"ارفع التذكرة", readingTicket:"جارٍ قراءة التذكرة...", ticketReady:"تمت قراءة التذكرة. راجع المعلومات وأكمل الحجز.", manualDivider:"أو أكمل الحجز يدوياً", ticketError:"تعذرت قراءة التذكرة. يمكنك تعبئة المعلومات يدوياً.",
     lastStep:"الخطوة الأخيرة", payment:"اختر طريقة الدفع", cash:"الدفع كاش", cashDesc:"الدفع نقداً عند تأكيد وتقديم الخدمة", wayl:"الدفع الإلكتروني", waylDesc:"دفع آمن إلكترونياً عن طريق Wayl", back:"رجوع", next:"التالي", booking:"تأكيد الحجز", bookingNow:"جاري الحجز", genericError:"تعذر إتمام الحجز، يرجى التأكد من المعلومات والمحاولة مرة أخرى",
     summary:"ملخص الحجز", experience:"تجربة لاونج بغداد", tripType:"نوع الرحلة", postArrival:"التوصيل بعد الوصول", airportAccess:"الوصول للمطار", withoutCar:"بدون سيارة", personalArrival:"وصول شخصي", peopleOne:"شخص", peopleMany:"أشخاص", bag:"حقيبة", appointment:"الموعد", loungeEntry:"دخول الصالة", car:"السيارة الخاصة", extraBagService:"خدمة حقائب إضافية", total:"المجموع", footerNote:"دخول الصالة: 40,000 د.ع للشخص. الأطفال دون سن 12 سنة مجانًا. سعر السيارة ثابت للكرخ أو الرصافة. يخضع الحجز للتأكيد النهائي من فريقنا.",
   },
@@ -32,7 +34,8 @@ const copy = {
     stepOne:"Step one", tripQuestion:"What type of trip is this?", departure:"Departure from the airport", departureDesc:"Arrange your airport arrival and lounge access before your flight", arrival:"Arrival at the airport", arrivalDesc:"A comfortable welcome after landing",
     transportService:"Transfer service", arrivalCarQ:"Do you need a private car after arrival?", accessService:"Airport access", departureCarQ:"How will you get to the airport?", noThanks:"No, thank you", loungeOnly:"Lounge booking only, without a car", self:"I will arrive myself", selfDesc:"I will reach the airport in my own car or with someone else", privateCar:"I need a private car", arrivalCarDesc:"A private car will meet you at the airport and take you to your destination", departureCarDesc:"A comfortable private car from your location to the airport",
     side:"Baghdad side", karkh:"Karkh", rusafa:"Rusafa", deliveryAddress:"Destination address", fullAddress:"Full address", addressPlaceholder:"Area, street, district", landmark:"Nearest landmark (optional)", landmarkPlaceholder:"Example: near the hospital...",
-    travelerDetails:"Traveler details", enterDetails:"Enter your flight information", fullName:"Full name", namePlaceholder:"Full name", phone:"Phone number", flight:"Flight number", flightPlaceholder:"Example: IA123", arrivalDate:"Arrival date", departureDate:"Departure date", arrivalTime:"Expected arrival time", departureTime:"Required pickup time", passengers:"Passengers", bags:"Bags", kids:"* Children under 12 enter free of charge.", extraBags:"More than 4 bags require an additional IQD 10,000 handling fee for an extra trolley and baggage assistant.", notes:"Additional notes (optional)", notesPlaceholder:"Any details that help us arrange your experience...",
+    travelerDetails:"Traveler details", enterDetails:"Enter your flight information", fullName:"Full name", namePlaceholder:"Full name", phone:"Phone number", airline:"Airline", selectAirline:"Select airline", otherAirline:"Other airline", flight:"Flight number", flightPlaceholder:"Example: IA123", arrivalDate:"Arrival date", departureDate:"Departure date", arrivalTime:"Expected arrival time", departureTime:"Required pickup time", passengers:"Passengers", bags:"Bags", kids:"* Children under 12 enter free of charge.", extraBags:"More than 4 bags require an additional IQD 10,000 handling fee for an extra trolley and baggage assistant.", notes:"Additional notes (optional)", notesPlaceholder:"Any details that help us arrange your experience...",
+    uploadTitle:"Have your ticket ready?", uploadText:"Upload a ticket image or PDF and we will fill in the flight details automatically.", uploadButton:"Upload ticket", readingTicket:"Reading your ticket...", ticketReady:"Ticket read successfully. Review the details and continue.", manualDivider:"or continue manually", ticketError:"We could not read the ticket. You can enter the details manually.",
     lastStep:"Final step", payment:"Choose payment method", cash:"Cash payment", cashDesc:"Pay in cash when the service is confirmed and provided", wayl:"Online payment", waylDesc:"Secure online payment via Wayl", back:"Back", next:"Next", booking:"Confirm booking", bookingNow:"Booking...", genericError:"We could not complete the booking. Please check your information and try again.",
     summary:"Booking summary", experience:"Lounge Baghdad experience", tripType:"Trip type", postArrival:"Transfer after arrival", airportAccess:"Airport access", withoutCar:"No car", personalArrival:"Self arrival", peopleOne:"person", peopleMany:"people", bag:"bag", appointment:"Date & time", loungeEntry:"Lounge entry", car:"Private car", extraBagService:"Extra baggage handling", total:"Total", footerNote:"Lounge entry: IQD 40,000 per person. Children under 12 enter free. Private car pricing is fixed for Karkh or Rusafa. All bookings are subject to final confirmation by our team.",
   }
@@ -44,6 +47,8 @@ export function BookingExperience({lang}:{lang:Lang}) {
   const [step,setStep] = useState(1);
   const [form,setForm] = useState<FormState>(initial);
   const [loading,setLoading] = useState(false);
+  const [extracting,setExtracting] = useState(false);
+  const [ticketMessage,setTicketMessage] = useState<{type:"success"|"error";text:string}|null>(null);
   const [error,setError] = useState("");
   const [result,setResult] = useState<{reference:string; paymentUrl?:string}|null>(null);
   const loungeTotal = form.passengers * 40000;
@@ -56,7 +61,7 @@ export function BookingExperience({lang}:{lang:Lang}) {
   const canContinue = useMemo(() => {
     if(step===1) return true;
     if(step===2) return form.transport === "self" || Boolean(form.address.trim());
-    return Boolean(form.name.trim() && /^\+?[0-9\s-]{8,15}$/.test(form.phone) && form.flightNumber.trim() && form.date && form.time);
+    return Boolean(form.name.trim() && /^\+?[0-9\s-]{8,15}$/.test(form.phone) && form.airline && form.flightNumber.trim() && form.date && form.time);
   },[step,form]);
 
   async function submit() {
@@ -69,6 +74,29 @@ export function BookingExperience({lang}:{lang:Lang}) {
       if(data.paymentUrl) window.location.href = data.paymentUrl;
     } catch(e) { setError(e instanceof Error ? e.message : t.genericError); }
     finally { setLoading(false); }
+  }
+
+  async function extractTicket(file?: File) {
+    if (!file) return;
+    setExtracting(true); setTicketMessage(null);
+    try {
+      const body = new FormData(); body.append("ticket", file);
+      const response = await fetch("/api/ticket/extract", { method:"POST", body });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || t.ticketError);
+      const details = data.details || {};
+      setForm(current => ({
+        ...current,
+        name: typeof details.name === "string" ? details.name : current.name,
+        airline: typeof details.airline === "string" ? details.airline : current.airline,
+        flightNumber: typeof details.flightNumber === "string" ? details.flightNumber.toUpperCase() : current.flightNumber,
+        date: typeof details.date === "string" ? details.date : current.date,
+        time: typeof details.time === "string" ? details.time : current.time,
+        tripType: details.tripType === "arrival" || details.tripType === "departure" ? details.tripType : current.tripType,
+      }));
+      setTicketMessage({type:"success",text:t.ticketReady});
+    } catch(error) { setTicketMessage({type:"error",text:error instanceof Error ? error.message : t.ticketError}); }
+    finally { setExtracting(false); }
   }
 
   if(result && !result.paymentUrl) return (
@@ -95,6 +123,15 @@ export function BookingExperience({lang}:{lang:Lang}) {
 
         <div className="booking-shell grid overflow-hidden rounded-sm bg-[#061827] text-[#f5eddf] lg:grid-cols-[1fr_340px]">
           <div className="p-5 sm:p-8 lg:p-10">
+            {step===1&&<div className="ticket-upload mb-8 rounded-xl border border-[#dce2e6] bg-[#f8fafb] p-4 sm:p-5">
+              <div className="flex items-start gap-3"><span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[#081a2b] text-[#d2bb8b]"><FileText size={18}/></span><div><h3 className="text-sm font-semibold text-[#081a2b]">{t.uploadTitle}</h3><p className="mt-1 text-[11px] leading-5 text-[#71818e]">{t.uploadText}</p></div></div>
+              <label className={`mt-4 flex min-h-12 items-center justify-center gap-2 rounded-lg bg-[#081a2b] px-4 text-xs font-semibold text-white ${extracting?"cursor-wait opacity-65":"cursor-pointer"}`}>
+                {extracting?<Loader2 size={16} className="animate-spin"/>:<Upload size={16}/>} {extracting?t.readingTicket:t.uploadButton}
+                <input type="file" className="sr-only" accept="image/jpeg,image/png,image/webp,application/pdf" disabled={extracting} onChange={event=>{void extractTicket(event.target.files?.[0]); event.currentTarget.value="";}} />
+              </label>
+              {ticketMessage&&<p role="status" className={`mt-3 text-[11px] ${ticketMessage.type==="success"?"text-emerald-700":"text-red-600"}`}>{ticketMessage.text}</p>}
+              <div className="mt-4 flex items-center gap-3 text-[9px] text-[#8a98a3]"><span className="h-px flex-1 bg-[#dce2e6]"/>{t.manualDivider}<span className="h-px flex-1 bg-[#dce2e6]"/></div>
+            </div>}
             <div className="mb-9 flex items-center gap-2">
               {[1,2,3,4].map(n=><div key={n} className="flex flex-1 items-center gap-2"><span className={`grid h-7 w-7 shrink-0 place-items-center rounded-full text-[11px] ${step>=n?"bg-[#081a2b] text-white":"border border-[#cfd8de] text-[#71818e]"}`}>{step>n?<Check size={13}/>:n}</span>{n<4&&<span className={`h-px flex-1 ${step>n?"bg-[#081a2b]":"bg-[#dce2e6]"}`}/>}</div>)}
             </div>
@@ -125,6 +162,7 @@ export function BookingExperience({lang}:{lang:Lang}) {
               <div className="grid gap-5 sm:grid-cols-2">
                 <Field label={t.fullName}><input className="field" placeholder={t.namePlaceholder} value={form.name} onChange={e=>patch("name",e.target.value)}/></Field>
                 <Field label={t.phone}><input className="field" dir="ltr" inputMode="tel" placeholder="07xxxxxxxxx" value={form.phone} onChange={e=>patch("phone",e.target.value)}/></Field>
+                <Field label={t.airline}><select className="field" value={form.airline} onChange={e=>patch("airline",e.target.value)}><option value="">{t.selectAirline}</option>{BAGHDAD_AIRLINES.map(airline=><option key={airline.code} value={`${airline.en} (${airline.code})`}>{rtl?airline.ar:airline.en} — {airline.code}</option>)}<option value={`${OTHER_AIRLINE.en} (${OTHER_AIRLINE.code})`}>{t.otherAirline}</option></select></Field>
                 <Field label={t.flight}><input className="field" dir="ltr" placeholder={t.flightPlaceholder} value={form.flightNumber} onChange={e=>patch("flightNumber",e.target.value.toUpperCase())}/></Field>
                 <Field label={form.tripType==="arrival"?t.arrivalDate:t.departureDate}><input className="field" type="date" value={form.date} onChange={e=>patch("date",e.target.value)}/></Field>
                 <Field label={form.tripType==="arrival"?t.arrivalTime:t.departureTime}><input className="field" type="time" value={form.time} onChange={e=>patch("time",e.target.value)}/></Field>
@@ -158,6 +196,7 @@ export function BookingExperience({lang}:{lang:Lang}) {
             <h3 className="mt-3 text-xl">{t.experience}</h3>
             <div className="mt-7 space-y-4 text-sm">
               <Summary label={t.tripType} value={form.tripType==="departure"?t.departure:t.arrival}/>
+              {form.airline&&<Summary label={t.airline} value={form.airline}/>}
               <Summary label={form.tripType==="arrival"?t.postArrival:t.airportAccess} value={form.transport==="chauffeur"?t.privateCar:form.tripType==="arrival"?t.withoutCar:t.personalArrival}/>
               <Summary label={t.passengers} value={`${form.passengers} ${form.passengers===1?t.peopleOne:t.peopleMany}`} icon={<Users size={14}/>}/>
               <Summary label={t.bags} value={`${form.bags} ${t.bag}`} icon={<Luggage size={14}/>}/>
