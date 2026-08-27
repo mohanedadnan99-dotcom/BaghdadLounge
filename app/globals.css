@@ -1,64 +1,125 @@
 @import "tailwindcss";
 
-:root {
-  --gold: #c6a367;
-  --gold-light: #ead7ae;
-  --ink: #10110f;
-  --card: #151613;
-  --muted: #aaa49a;
+:root { --ink:#0b0b0a; --ink-soft:#151512; --ivory:#eee9df; --paper:#f5f1e9; --champagne:#c9ae78; --line:rgba(255,255,255,.14); }
+* { box-sizing:border-box; }
+html { scroll-behavior:smooth; }
+body { margin:0; background:var(--ink); color:#f7f3ea; font-family:var(--font-arabic),sans-serif; }
+a { color:inherit; text-decoration:none; }
+button,input,select,textarea { font:inherit; }
+button { cursor:pointer; }
+::selection { background:var(--champagne); color:var(--ink); }
+
+/* Original Lounge Baghdad identity */
+.signature { display:flex; align-items:center; gap:12px; color:#f4efe5; direction:ltr; }
+.signature-symbol { position:relative; display:grid; grid-template-columns:1fr 1fr; width:46px; height:46px; border:1px solid rgba(214,188,135,.65); font:600 14px/1 var(--font-latin),sans-serif; letter-spacing:-.04em; }
+.signature-symbol::after { content:""; position:absolute; inset:5px 50% 5px auto; width:1px; background:rgba(214,188,135,.55); }
+.signature-symbol span { display:grid; place-items:center; }
+.signature-copy { display:flex; flex-direction:column; gap:3px; font:600 10px/1 var(--font-latin),sans-serif; letter-spacing:.28em; }
+.signature-light { color:#171713; }
+.signature-light .signature-symbol { border-color:rgba(49,43,31,.55); }
+.signature-light .signature-symbol::after { background:rgba(49,43,31,.38); }
+
+.brand-hero { position:relative; min-height:980px; overflow:hidden; background:var(--ink); isolation:isolate; }
+.brand-header { position:relative; z-index:20; display:flex; height:98px; max-width:1540px; margin:auto; padding:0 44px; align-items:center; justify-content:space-between; border-bottom:1px solid rgba(255,255,255,.08); }
+.brand-nav { display:flex; align-items:center; gap:22px; }
+.language-switch { min-width:48px; height:38px; padding:0 13px; border:1px solid rgba(255,255,255,.15); border-radius:999px; background:transparent; color:#d2ba8a; font-size:10px; transition:.2s; }
+.language-switch:hover { border-color:#c9ae78; background:rgba(201,174,120,.08); }
+.header-book { display:flex; align-items:center; gap:10px; padding:11px 17px; border-bottom:1px solid #c9ae78; color:#eee8dc; font-size:11px; }
+.hero-watermark { position:absolute; z-index:-1; top:104px; left:2.5%; color:transparent; font:600 clamp(7rem,17vw,16rem)/.9 var(--font-latin),sans-serif; letter-spacing:-.07em; -webkit-text-stroke:1px rgba(255,255,255,.055); user-select:none; }
+.hero-image-wrap { position:absolute; top:146px; bottom:72px; left:3.2%; width:66%; overflow:hidden; }
+.hero-image-wrap::before { content:""; position:absolute; z-index:3; inset:16px; border:1px solid rgba(255,255,255,.16); pointer-events:none; }
+.hero-image-shade { position:absolute; inset:0; background:linear-gradient(90deg,rgba(5,5,4,.04),rgba(5,5,4,.1) 55%,rgba(5,5,4,.55)); }
+[dir="ltr"] .hero-image-shade { background:linear-gradient(-90deg,rgba(5,5,4,.04),rgba(5,5,4,.1) 55%,rgba(5,5,4,.55)); }
+.image-caption { position:absolute; z-index:4; bottom:36px; left:38px; display:flex; align-items:center; gap:12px; color:rgba(255,255,255,.72); font-size:10px; }
+.image-caption span { width:34px; height:1px; background:#d3b77f; }
+.airport-code { position:absolute; z-index:5; top:155px; left:calc(69.2% - 65px); display:flex; width:132px; height:132px; flex-direction:column; align-items:center; justify-content:center; background:#c9ae78; color:#10100e; direction:ltr; }
+.airport-code b { font:600 30px/1 var(--font-latin),sans-serif; letter-spacing:.05em; }
+.airport-code span { margin-top:10px; font-size:8px; letter-spacing:.12em; opacity:.65; }
+.hero-statement { position:absolute; z-index:8; top:318px; right:5.5%; width:min(47%,680px); padding:48px 50px 46px; background:var(--ivory); color:#171713; box-shadow:0 34px 100px rgba(0,0,0,.24); }
+.statement-overline { display:flex; align-items:center; gap:12px; margin:0; color:#806f50; font-size:9px; letter-spacing:.1em; }
+.statement-overline span { width:28px; height:1px; background:#9f8655; }
+.hero-statement h1 { margin:25px 0 0; font-size:clamp(2.65rem,4.8vw,5.3rem); font-weight:400; line-height:1.18; letter-spacing:-.055em; }
+.hero-statement h1 span,.hero-statement h1 em { display:block; }
+.hero-statement h1 em { color:#9b7941; font-style:normal; font-weight:300; }
+.statement-copy { max-width:530px; margin:24px 0 0; color:#6c675f; font-size:13px; line-height:2; }
+.statement-actions { display:flex; margin-top:30px; align-items:center; gap:24px; }
+.primary-book { display:flex; min-width:205px; height:58px; align-items:center; justify-content:space-between; background:#11110f; color:#f6f1e7; }
+.primary-book>span { padding:0 21px; font-size:12px; font-weight:600; }
+.primary-book i { display:grid; width:58px; height:58px; place-items:center; border-right:1px solid rgba(255,255,255,.16); color:#d1b477; font-style:normal; transition:.25s; }
+[dir="ltr"] .primary-book i { border-right:0; border-left:1px solid rgba(255,255,255,.16); }
+.primary-book:hover i { background:#c9ae78; color:#11110f; }
+.statement-actions p { display:flex; align-items:center; gap:7px; margin:0; color:#888177; font-size:9px; white-space:nowrap; }
+.hero-index { position:absolute; z-index:5; right:5.5%; bottom:54px; display:flex; width:36%; align-items:center; gap:15px; color:rgba(255,255,255,.35); direction:ltr; font:500 8px/1 var(--font-latin),sans-serif; letter-spacing:.18em; }
+.hero-index i { height:1px; flex:1; background:rgba(255,255,255,.15); }
+.hero-index b { color:#c9ae78; font-size:10px; }
+
+.brand-pillars { background:#11110f; border-top:1px solid rgba(255,255,255,.08); border-bottom:1px solid rgba(255,255,255,.08); }
+.pillars-inner { display:grid; max-width:1260px; margin:auto; grid-template-columns:repeat(3,1fr); }
+.pillars-inner article { display:grid; min-height:142px; padding:28px 34px; grid-template-columns:auto auto 1fr; align-items:center; gap:18px; border-left:1px solid rgba(255,255,255,.09); }
+.pillars-inner article:last-child { border-left:0; }
+.pillar-number { align-self:start; color:#76684d; font:500 8px/1 var(--font-latin),sans-serif; }
+.pillars-inner svg { color:#c9ae78; }
+.pillars-inner h2 { margin:0; color:#ece7dd; font-size:12px; font-weight:600; }
+.pillars-inner p { margin:7px 0 0; color:#77736b; font-size:10px; line-height:1.8; }
+
+/* Booking system — same flow, elevated presentation */
+.booking-pattern { opacity:.38; background-image:linear-gradient(rgba(18,19,16,.055) 1px,transparent 1px),linear-gradient(90deg,rgba(18,19,16,.055) 1px,transparent 1px); background-size:38px 38px; mask-image:linear-gradient(to bottom,black,transparent 72%); }
+.booking-shell { position:relative; border-radius:4px!important; box-shadow:0 45px 120px rgba(37,32,22,.16)!important; }
+.booking-shell::before { content:"LB / RESERVATION"; position:absolute; z-index:4; top:0; left:0; padding:10px 15px; background:#c9ae78; color:#151511; font:600 7px/1 var(--font-latin),sans-serif; letter-spacing:.15em; }
+.booking-summary { border-radius:0!important; }
+.field { width:100%; min-height:52px; border:1px solid #3a3933; background:#0f100e; color:#f8f5ed; border-radius:2px; padding:13px 14px; outline:none; transition:.2s; }
+.field:focus { border-color:#c9ae78; box-shadow:0 0 0 3px rgba(201,174,120,.1); }
+.field::placeholder { color:#66635d; }
+.field option { background:#111; }
+.label { display:block; margin-bottom:8px; color:#d8d2c8; font-size:12px; }
+.choice { border:1px solid #35342f; border-radius:2px!important; background:#11120f; transition:transform .2s,border-color .2s,background .2s; }
+.choice:hover { border-color:#766442; }
+.choice.active { border-color:#c9ae78; background:rgba(201,174,120,.075); box-shadow:inset 0 0 0 1px rgba(201,174,120,.1); }
+.choice:active { transform:scale(.99); }
+
+.brand-footer { padding:72px 6% 28px; background:#d0b57f; color:#171713; }
+.footer-top { display:flex; max-width:1260px; margin:auto; align-items:flex-end; justify-content:space-between; }
+.footer-top p { margin:0; font-size:clamp(1.3rem,3vw,2.7rem); font-weight:300; letter-spacing:-.035em; }
+.footer-bottom { display:flex; max-width:1260px; margin:50px auto 0; padding-top:18px; justify-content:space-between; border-top:1px solid rgba(23,23,19,.2); font:500 8px/1.4 var(--font-latin),sans-serif; letter-spacing:.14em; }
+
+@media (max-width:900px) {
+  .brand-hero { min-height:920px; }
+  .brand-header { height:84px; padding:0 20px; }
+  .signature-symbol { width:40px; height:40px; font-size:12px; }
+  .signature-copy { font-size:8px; }
+  .brand-nav { gap:10px; }
+  .header-book { display:none; }
+  .hero-watermark { top:90px; left:-2%; font-size:28vw; }
+  .hero-image-wrap { top:112px; left:18px; right:18px; bottom:auto; width:auto; height:470px; }
+  .hero-image-wrap::before { inset:10px; }
+  .hero-image-shade { background:linear-gradient(to bottom,rgba(5,5,4,.02),rgba(5,5,4,.5)); }
+  .airport-code { top:130px; left:auto; right:0; width:86px; height:86px; }
+  .airport-code b { font-size:21px; }
+  .airport-code span { font-size:6px; }
+  .image-caption { bottom:26px; left:26px; }
+  .hero-statement { top:515px; right:20px; left:20px; width:auto; padding:34px 27px 31px; }
+  .hero-statement h1 { margin-top:19px; font-size:clamp(2.35rem,11vw,4rem); }
+  .statement-copy { margin-top:19px; font-size:12px; line-height:1.9; }
+  .statement-actions { margin-top:24px; gap:14px; }
+  .primary-book { min-width:190px; height:54px; }
+  .primary-book i { width:54px; height:54px; }
+  .statement-actions p { display:none; }
+  .hero-index { right:20px; bottom:28px; width:calc(100% - 40px); }
+  .pillars-inner { grid-template-columns:1fr; }
+  .pillars-inner article { min-height:112px; padding:22px 24px; border-left:0; border-bottom:1px solid rgba(255,255,255,.08); }
+  .pillars-inner article:last-child { border-bottom:0; }
+  .footer-top { align-items:flex-start; flex-direction:column; gap:36px; }
+  .footer-bottom { align-items:flex-start; flex-direction:column; gap:10px; }
 }
 
-* { box-sizing: border-box; }
-html { scroll-behavior: smooth; }
-body {
-  margin: 0;
-  background: var(--ink);
-  color: #f6f2e9;
-  font-family: var(--font-arabic), sans-serif;
-}
-a { color: inherit; text-decoration: none; }
-button, input, select, textarea { font: inherit; }
-button { cursor: pointer; }
-::selection { background: var(--gold); color: #090909; }
-
-.brand-mark {
-  position: relative; display: grid; height: 46px; width: 46px; flex: none; place-items: center;
-  border: 1px solid rgba(232,213,173,.5); border-radius: 50%; color: #ead7ae;
-  font-family: var(--font-latin), sans-serif; letter-spacing: .08em;
-}
-.brand-mark i { position: absolute; right: 3px; bottom: 3px; height: 7px; width: 7px; border-radius: 50%; background: #d4b77e; box-shadow: 0 0 0 3px #10110f; }
-.nav-pill { border: 1px solid rgba(255,255,255,.14); border-radius: 999px; background: rgba(255,255,255,.04); padding: 11px 14px; color: #d9bc83; font-size: 10px; transition: .2s; }
-.nav-pill:hover { border-color: rgba(217,188,131,.55); background: rgba(217,188,131,.08); }
-.hero-kicker { display: flex; align-items: center; gap: 9px; color: #cbb17f; font-size: 10px; letter-spacing: .13em; }
-
-.hero-noise {
-  background-image: radial-gradient(circle at 15% 20%, rgba(201,165,92,.12), transparent 32%),
-    radial-gradient(circle at 80% 80%, rgba(201,165,92,.08), transparent 30%);
-}
-.booking-pattern { opacity: .45; background-image: radial-gradient(rgba(18,19,16,.15) .7px, transparent .7px); background-size: 16px 16px; mask-image: linear-gradient(to bottom, black, transparent 68%); }
-.gold-text {
-  background: linear-gradient(110deg, #a9823e, #f1d79d 48%, #b88d43);
-  -webkit-background-clip: text;
-  color: transparent;
-}
-.field {
-  width: 100%; min-height: 50px; border: 1px solid #393934; background: #10110f; color: #f8f5ed;
-  border-radius: 14px; padding: 13px 14px; outline: none; transition: .2s;
-}
-.field:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(201,165,92,.12); }
-.field::placeholder { color: #69655f; }
-.field option { background: #111; }
-.label { display: block; margin-bottom: 8px; color: #d7d0c4; font-size: 13px; }
-.choice { border: 1px solid #35352f; background: #11120f; transition: transform .2s, border-color .2s, background .2s; }
-.choice:hover { border-color: #64573c; }
-.choice.active { border-color: var(--gold); background: rgba(201,165,92,.085); box-shadow: inset 0 0 0 1px rgba(201,165,92,.12); }
-.choice:active { transform: scale(.99); }
-
-@media (max-width: 1023px) {
-  .booking-summary { border-radius: 0 0 1.75rem 1.75rem; }
+@media (max-width:430px) {
+  .brand-hero { min-height:900px; }
+  .signature-copy { display:none; }
+  .hero-image-wrap { height:430px; }
+  .hero-statement { top:475px; }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  html { scroll-behavior: auto; }
-  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+@media (prefers-reduced-motion:reduce) {
+  html { scroll-behavior:auto; }
+  *,*::before,*::after { animation-duration:.01ms!important; animation-iteration-count:1!important; transition-duration:.01ms!important; }
 }
