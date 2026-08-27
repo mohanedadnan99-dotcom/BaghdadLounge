@@ -28,6 +28,7 @@ export const bookingSchema = z.object({
   side: z.enum(["karkh", "rusafa"]),
   name: z.string().trim().min(3, "يرجى كتابة الاسم الحقيقي").max(100).refine(looksLikeRealName, "يرجى إدخال الاسم الحقيقي لإتمام الحجز"),
   phone: z.string().trim().regex(/^\+?[0-9\s-]{8,20}$/, "يرجى إدخال رقم هاتف صحيح").refine(looksLikeRealPhone, "رقم الهاتف يبدو غير صحيح، يرجى إدخال رقم يمكن التواصل معك عليه"),
+  airline: z.string().trim().min(2, "يرجى اختيار شركة الطيران").max(100),
   flightNumber: z.string().trim().min(2).max(20),
   date: z.iso.date(),
   time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
