@@ -2,8 +2,15 @@ import { z } from "zod";
 
 const fakeNamePattern = /^(test|testing|guest|unknown|name|xxx+|asdf+|qwer+|مجهول|اسم|تجربة|اختبار)$/i;
 
+export const COMPANY_PROMO_CODE = "LB-COMPANY10";
+export const COMPANY_PROMO_PERCENT = 10;
+
 export function normalizePromoCode(value: string) {
   return value.trim().toUpperCase().replace(/\s+/g, "");
+}
+
+export function isValidPromoCode(value: string) {
+  return normalizePromoCode(value) === COMPANY_PROMO_CODE;
 }
 
 function looksLikeRealName(value: string) {
