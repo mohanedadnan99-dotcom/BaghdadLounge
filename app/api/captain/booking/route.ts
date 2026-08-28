@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { verifyCaptainSession } from "@/lib/captain-auth";
+import { saveCaptainOrder } from "@/lib/captain-orders-db";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -71,8 +72,22 @@ export async function POST(request: Request) {
       body: JSON.stringify({ chat_id: chatId, text: message, parse_mode: "HTML" }),
     });
     if (!telegram.ok) return Response.json({ message: "تعذر تأكيد الطلب، حاول مرة ثانية" }, { status: 502 });
+
+    await saveCaptainOrder({
+      reference,
+      captainName: captain.name,
+      captainCompany: captain.company || "",
+      captainPhone: captain.phone || "",
+      loungeName: lounge,
+      passengers: Number(body.passengers),
+      bags: Number(body.bags),
+      carts: Number(body.carts),
+      passengerPhone: phone,
+    });
+
     return Response.json({ orderId: reference }, { status: 201, headers: { "Cache-Control": "no-store" } });
-  } catch {
+  } catch (error) {
+    console.error("Captain booking failed", error);
     return Response.json({ message: "صار خلل أثناء تأكيد الطلب" }, { status: 500 });
   }
 }
