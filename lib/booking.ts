@@ -2,15 +2,8 @@ import { z } from "zod";
 
 const fakeNamePattern = /^(test|testing|guest|unknown|name|xxx+|asdf+|qwer+|مجهول|اسم|تجربة|اختبار)$/i;
 
-export const COMPANY_PROMO_CODE = "LB-COMPANY10";
-export const COMPANY_PROMO_PERCENT = 10;
-
 export function normalizePromoCode(value: string) {
-  return value.trim().toUpperCase();
-}
-
-export function isValidPromoCode(value: string) {
-  return normalizePromoCode(value) === COMPANY_PROMO_CODE;
+  return value.trim().toUpperCase().replace(/\s+/g, "");
 }
 
 function looksLikeRealName(value: string) {
@@ -52,19 +45,27 @@ export const bookingSchema = z.object({
   promoCode: z.string().trim().max(40).default(""),
 }).superRefine((data,ctx)=>{
   if(data.transport === "chauffeur" && data.address.length < 5) ctx.addIssue({ code:"custom", path:["address"], message:"العنوان مطلوب عند اختيار السيارة" });
-  if(data.promoCode && !isValidPromoCode(data.promoCode)) ctx.addIssue({ code:"custom", path:["promoCode"], message:"رمز الخصم غير صحيح أو غير فعّال" });
+  if(data.promoCode && !/^[A-Za-z0-9_-]{3,30}$/.test(normalizePromoCode(data.promoCode))) ctx.addIssue({ code:"custom", path:["promoCode"], message:"رمز الخصم غير صحيح" });
 });
 
 export type BookingInput = z.infer<typeof bookingSchema>;
 
-export function totals(booking: BookingInput) {
+export type AppliedPromo = {
+  code: string;
+  companyName: string;
+  discountPercent: number;
+};
+
+export function totals(booking: BookingInput, promo?: AppliedPromo | null) {
   const lounge = booking.passengers * 40000;
   const car = booking.transport === "chauffeur" ? 75000 : 0;
   const extraBaggage = booking.bags > 4 ? 10000 : 0;
   const subtotal = lounge + car + extraBaggage;
-  const promoCode = isValidPromoCode(booking.promoCode) ? COMPANY_PROMO_CODE : "";
-  const discount = promoCode ? Math.round(subtotal * COMPANY_PROMO_PERCENT / 100) : 0;
-  return { lounge, car, extraBaggage, subtotal, discount, total: subtotal - discount, promoCode };
+  const promoCode = promo?.code || "";
+  const promoCompany = promo?.companyName || "";
+  const promoPercent = promo?.discountPercent || 0;
+  const discount = promoCode ? Math.round(subtotal * promoPercent / 100) : 0;
+  return { lounge, car, extraBaggage, subtotal, discount, total: subtotal - discount, promoCode, promoCompany, promoPercent };
 }
 
 export type BookingTotals = ReturnType<typeof totals>;
