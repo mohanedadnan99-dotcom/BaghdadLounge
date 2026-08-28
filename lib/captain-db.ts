@@ -1,6 +1,7 @@
 import { neon } from "@neondatabase/serverless";
 import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 
+// Supports the standard connection variable names used by Vercel + Neon.
 export type CaptainRecord = {
   id: number;
   username: string;
