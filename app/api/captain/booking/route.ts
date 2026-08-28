@@ -1,15 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { verifyCaptainSession } from "@/lib/captain-auth";
 import { saveCaptainOrder } from "@/lib/captain-orders-db";
+import { findWatchMatch, getLoungeById } from "@/lib/operations-db";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-const lounges: Record<string, string> = {
-  samarra: "صالة سامراء",
-  babylon: "صالة بابل",
-  nineveh: "صالة نينوى",
-};
 
 function escapeHtml(value: string) {
   return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\"/g, "&quot;").replace(/'/g, "&#039;");
@@ -37,11 +32,17 @@ export async function POST(request: Request) {
     const captain = body.sessionToken ? verifyCaptainSession(body.sessionToken) : null;
     if (!captain) return Response.json({ message: "انتهت جلسة الدخول، سجل دخولك مرة ثانية" }, { status: 401 });
 
-    const lounge = body.loungeId ? lounges[body.loungeId] : undefined;
+    const loungeSetting = body.loungeId ? await getLoungeById(body.loungeId) : undefined;
+    const lounge = loungeSetting?.active ? loungeSetting.name : undefined;
     const phone = body.phone?.replace(/[\s-]/g, "") || "";
     const validCount = (value: unknown, min: number) => Number.isInteger(value) && Number(value) >= min && Number(value) <= 20;
     if (!lounge || !validCount(body.passengers, 1) || !validCount(body.bags, 0) || !validCount(body.carts, 0) || !/^(?:\+?964|0)?7\d{9}$/.test(phone)) {
-      return Response.json({ message: "راجع معلومات الطلب وحاول مرة ثانية" }, { status: 400 });
+      return Response.json({ message: loungeSetting && !loungeSetting.active ? "هذه الصالة متوقفة حالياً" : "راجع معلومات الطلب وحاول مرة ثانية" }, { status: 400 });
+    }
+
+    const watchMatch = await findWatchMatch({ phone, captain: captain.name, company: captain.company || "" });
+    if (watchMatch) {
+      return Response.json({ message: `تعذر تأكيد الطلب. يرجى التواصل مع الإدارة${watchMatch.note ? ` — ${watchMatch.note}` : ""}` }, { status: 403 });
     }
 
     const token = process.env.TELEGRAM_BOT_TOKEN;
