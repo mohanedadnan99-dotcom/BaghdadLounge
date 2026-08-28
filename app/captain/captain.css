@@ -1,0 +1,188 @@
+.captain-scope {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Arabic", "Geeza Pro", var(--font-arabic), sans-serif;
+}
+
+/* Login screen: match the supplied mobile reference more closely. */
+.captain-scope main:not(:has(header)) {
+  padding: 20px 18px 28px !important;
+}
+
+.captain-scope main:not(:has(header)) > div {
+  max-width: 390px !important;
+}
+
+/* Top row: badge on the left, portal mark on the right. */
+.captain-scope main:not(:has(header)) > div > div:first-child {
+  direction: ltr;
+  align-items: flex-start;
+}
+
+.captain-scope main:not(:has(header)) > div > div:first-child > div {
+  direction: ltr;
+  gap: 10px !important;
+}
+
+.captain-scope main:not(:has(header)) > div > div:first-child > div > div:first-child {
+  direction: rtl;
+}
+
+.captain-scope main:not(:has(header)) > div > div:first-child h2 {
+  font-size: 18px !important;
+  font-weight: 700 !important;
+  line-height: 1.2 !important;
+}
+
+.captain-scope main:not(:has(header)) > div > div:first-child p {
+  margin-top: 5px !important;
+  font-size: 10px !important;
+}
+
+.captain-scope main:not(:has(header)) > div > div:first-child > span {
+  padding: 8px 15px !important;
+  font-size: 12px !important;
+}
+
+.captain-scope main:not(:has(header)) > div > div:first-child > div > div:last-child {
+  width: 52px !important;
+  height: 52px !important;
+  border-radius: 18px !important;
+}
+
+/* Shield block sits on the right in the reference. */
+.captain-scope main:not(:has(header)) > div > div:nth-child(2) {
+  justify-content: flex-start !important;
+  margin-top: 38px !important;
+}
+
+.captain-scope main:not(:has(header)) > div > div:nth-child(2) > div {
+  width: 64px !important;
+  height: 64px !important;
+  border-radius: 22px !important;
+}
+
+.captain-scope main:not(:has(header)) > div > div:nth-child(2) svg {
+  width: 31px !important;
+  height: 31px !important;
+}
+
+.captain-scope main:not(:has(header)) > div > div:nth-child(3) {
+  margin-top: 16px !important;
+}
+
+.captain-scope main:not(:has(header)) > div > div:nth-child(3) > p:first-child {
+  font-size: 15px !important;
+  font-weight: 700 !important;
+}
+
+.captain-scope main:not(:has(header)) > div > div:nth-child(3) h1 {
+  margin-top: 8px !important;
+  font-size: 29px !important;
+  font-weight: 700 !important;
+  line-height: 1.32 !important;
+  letter-spacing: -0.015em !important;
+}
+
+.captain-scope main:not(:has(header)) > div > div:nth-child(3) > p:last-child {
+  margin-top: 10px !important;
+  font-size: 12.5px !important;
+  line-height: 2 !important;
+}
+
+.captain-scope main:not(:has(header)) form {
+  margin-top: 18px !important;
+  padding: 17px !important;
+  border-radius: 25px !important;
+}
+
+/* Login card title layout: lock on left, text on right. */
+.captain-scope main:not(:has(header)) form > div:first-child {
+  direction: ltr;
+  align-items: center !important;
+}
+
+.captain-scope main:not(:has(header)) form > div:first-child > div:last-child {
+  direction: rtl;
+  flex: 1;
+}
+
+.captain-scope main:not(:has(header)) form > div:first-child > div:first-child {
+  width: 42px !important;
+  height: 42px !important;
+}
+
+.captain-scope main:not(:has(header)) form > div:first-child h2 {
+  font-size: 20px !important;
+  font-weight: 700 !important;
+}
+
+.captain-scope main:not(:has(header)) form > div:first-child p {
+  font-size: 11px !important;
+}
+
+.captain-scope main:not(:has(header)) form label {
+  margin-top: 15px !important;
+  margin-bottom: 7px !important;
+  font-size: 12.5px !important;
+  font-weight: 600 !important;
+}
+
+.captain-scope main:not(:has(header)) form input {
+  height: 54px !important;
+  border-radius: 18px !important;
+  font-size: 15px !important;
+}
+
+.captain-scope main:not(:has(header)) form > button {
+  direction: ltr;
+  height: 54px !important;
+  margin-top: 18px !important;
+  border-radius: 18px !important;
+  font-size: 14.5px !important;
+  font-weight: 600 !important;
+}
+
+.captain-scope main:not(:has(header)) > div > p:last-child {
+  padding-top: 34px !important;
+  font-size: 10.5px !important;
+}
+
+/* Logged-in header: profile on right, logout on left. */
+.captain-scope main:has(header) header > div {
+  direction: ltr;
+}
+
+.captain-scope main:has(header) header > div > div {
+  direction: rtl;
+}
+
+/* Lounge cards: icon right, arrow left, same as reference. */
+.captain-scope main:has(header) section > div[class*="space-y"] > button {
+  direction: ltr;
+}
+
+.captain-scope main:has(header) section > div[class*="space-y"] > button > div {
+  direction: rtl;
+}
+
+/* + on left and − on right in counters. */
+.captain-scope main:has(header) form div[class*="bg-[#f8fafb]"][class*="justify-between"] {
+  direction: ltr;
+}
+
+/* Review lounge strip has badge left and text right. */
+.captain-scope main:has(header) section > div[class*="overflow-hidden"] > div:first-child > div {
+  direction: ltr;
+}
+
+.captain-scope main:has(header) section > div[class*="overflow-hidden"] > div:first-child > div > div:last-child {
+  direction: rtl;
+}
+
+@media (max-width: 380px) {
+  .captain-scope main:not(:has(header)) > div > div:nth-child(3) h1 {
+    font-size: 27px !important;
+  }
+  .captain-scope main:not(:has(header)) {
+    padding-inline: 15px !important;
+  }
+}
