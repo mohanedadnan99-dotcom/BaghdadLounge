@@ -2,6 +2,17 @@ import { z } from "zod";
 
 const fakeNamePattern = /^(test|testing|guest|unknown|name|xxx+|asdf+|qwer+|مجهول|اسم|تجربة|اختبار)$/i;
 
+export const COMPANY_PROMO_CODE = "LB-COMPANY10";
+export const COMPANY_PROMO_PERCENT = 10;
+
+export function normalizePromoCode(value: string) {
+  return value.trim().toUpperCase();
+}
+
+export function isValidPromoCode(value: string) {
+  return normalizePromoCode(value) === COMPANY_PROMO_CODE;
+}
+
 function looksLikeRealName(value: string) {
   const name = value.trim().replace(/\s+/g, " ");
   if (name.length < 3 || fakeNamePattern.test(name)) return false;
@@ -38,8 +49,10 @@ export const bookingSchema = z.object({
   landmark: z.string().trim().max(200),
   notes: z.string().trim().max(1000),
   payment: z.enum(["cash", "wayl"]),
+  promoCode: z.string().trim().max(40).default(""),
 }).superRefine((data,ctx)=>{
   if(data.transport === "chauffeur" && data.address.length < 5) ctx.addIssue({ code:"custom", path:["address"], message:"العنوان مطلوب عند اختيار السيارة" });
+  if(data.promoCode && !isValidPromoCode(data.promoCode)) ctx.addIssue({ code:"custom", path:["promoCode"], message:"رمز الخصم غير صحيح أو غير فعّال" });
 });
 
 export type BookingInput = z.infer<typeof bookingSchema>;
@@ -48,8 +61,13 @@ export function totals(booking: BookingInput) {
   const lounge = booking.passengers * 40000;
   const car = booking.transport === "chauffeur" ? 75000 : 0;
   const extraBaggage = booking.bags > 4 ? 10000 : 0;
-  return { lounge, car, extraBaggage, total: lounge + car + extraBaggage };
+  const subtotal = lounge + car + extraBaggage;
+  const promoCode = isValidPromoCode(booking.promoCode) ? COMPANY_PROMO_CODE : "";
+  const discount = promoCode ? Math.round(subtotal * COMPANY_PROMO_PERCENT / 100) : 0;
+  return { lounge, car, extraBaggage, subtotal, discount, total: subtotal - discount, promoCode };
 }
+
+export type BookingTotals = ReturnType<typeof totals>;
 
 export function bookingReference() {
   const date = new Date();

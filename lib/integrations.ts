@@ -1,7 +1,7 @@
 import { neon } from "@neondatabase/serverless";
-import type { BookingInput } from "./booking";
+import type { BookingInput, BookingTotals } from "./booking";
 
-export async function saveBooking(reference: string, booking: BookingInput, total: number) {
+export async function saveBooking(reference: string, booking: BookingInput, pricing: BookingTotals) {
   if (!process.env.DATABASE_URL) return;
   const sql = neon(process.env.DATABASE_URL);
   await sql`CREATE TABLE IF NOT EXISTS lounge_bookings (
@@ -11,15 +11,18 @@ export async function saveBooking(reference: string, booking: BookingInput, tota
     booking_date DATE NOT NULL, booking_time TIME NOT NULL, passengers INTEGER NOT NULL,
     bags INTEGER NOT NULL, notes TEXT, payment_method TEXT NOT NULL,
     payment_status TEXT NOT NULL DEFAULT 'pending', total_iqd INTEGER NOT NULL,
+    promo_code TEXT, discount_iqd INTEGER NOT NULL DEFAULT 0,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`;
   await sql`ALTER TABLE lounge_bookings ADD COLUMN IF NOT EXISTS airline TEXT`;
+  await sql`ALTER TABLE lounge_bookings ADD COLUMN IF NOT EXISTS promo_code TEXT`;
+  await sql`ALTER TABLE lounge_bookings ADD COLUMN IF NOT EXISTS discount_iqd INTEGER NOT NULL DEFAULT 0`;
   await sql`INSERT INTO lounge_bookings
-    (reference, customer_name, phone, airline, flight_number, trip_type, transport, city_side, address, landmark, booking_date, booking_time, passengers, bags, notes, payment_method, total_iqd)
-    VALUES (${reference}, ${booking.name}, ${booking.phone}, ${booking.airline}, ${booking.flightNumber}, ${booking.tripType}, ${booking.transport}, ${booking.side}, ${booking.address}, ${booking.landmark}, ${booking.date}, ${booking.time}, ${booking.passengers}, ${booking.bags}, ${booking.notes}, ${booking.payment}, ${total})`;
+    (reference, customer_name, phone, airline, flight_number, trip_type, transport, city_side, address, landmark, booking_date, booking_time, passengers, bags, notes, payment_method, promo_code, discount_iqd, total_iqd)
+    VALUES (${reference}, ${booking.name}, ${booking.phone}, ${booking.airline}, ${booking.flightNumber}, ${booking.tripType}, ${booking.transport}, ${booking.side}, ${booking.address}, ${booking.landmark}, ${booking.date}, ${booking.time}, ${booking.passengers}, ${booking.bags}, ${booking.notes}, ${booking.payment}, ${pricing.promoCode || null}, ${pricing.discount}, ${pricing.total})`;
 }
 
-export async function notifyTelegram(reference: string, booking: BookingInput, total: number) {
+export async function notifyTelegram(reference: string, booking: BookingInput, pricing: BookingTotals) {
   const token = process.env.TELEGRAM_BOT_TOKEN;
   const chatId = process.env.TELEGRAM_CHAT_ID || "-5382562153";
   if (!token || token === "(توكن)") return;
@@ -47,7 +50,10 @@ export async function notifyTelegram(reference: string, booking: BookingInput, t
     `طريقة الدفع: ${booking.payment === "cash" ? "كاش" : "Wayl إلكتروني"}`,
     booking.notes ? `ملاحظات: ${booking.notes}` : "",
     "━━━━━━━━━━━━━━",
-    `الحساب: ${new Intl.NumberFormat("en-US").format(total)} د.ع`,
+    pricing.promoCode ? `رمز الخصم: ${pricing.promoCode} — خصم 10%` : "",
+    pricing.discount ? `قيمة الخصم: ${new Intl.NumberFormat("en-US").format(pricing.discount)} د.ع` : "",
+    pricing.discount ? `المجموع قبل الخصم: ${new Intl.NumberFormat("en-US").format(pricing.subtotal)} د.ع` : "",
+    `الحساب النهائي: ${new Intl.NumberFormat("en-US").format(pricing.total)} د.ع`,
   ].filter(Boolean).join("\n");
 
   const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {

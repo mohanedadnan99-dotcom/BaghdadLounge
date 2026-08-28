@@ -1,8 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ArrowLeft, ArrowRight, Banknote, CarFront, Check, CreditCard, FileText, Loader2, Luggage, Minus, PlaneLanding, PlaneTakeoff, Plus, Upload, Users } from "lucide-react";
+import { ArrowLeft, ArrowRight, Banknote, CarFront, Check, CreditCard, FileText, Loader2, Luggage, Minus, PlaneLanding, PlaneTakeoff, Plus, Tag, Upload, Users } from "lucide-react";
 import { BAGHDAD_AIRLINES, OTHER_AIRLINE } from "@/lib/airlines";
+import { COMPANY_PROMO_CODE, COMPANY_PROMO_PERCENT, isValidPromoCode } from "@/lib/booking";
 
 type Lang = "ar" | "en";
 type FormState = {
@@ -12,9 +13,10 @@ type FormState = {
   name: string; phone: string; airline: string; flightNumber: string; date: string; time: string;
   passengers: number; bags: number; address: string; landmark: string; notes: string;
   payment: "cash" | "wayl";
+  promoCode: string;
 };
 
-const initial: FormState = { tripType:"departure", transport:"self", side:"karkh", name:"", phone:"", airline:"", flightNumber:"", date:"", time:"", passengers:1, bags:0, address:"", landmark:"", notes:"", payment:"cash" };
+const initial: FormState = { tripType:"departure", transport:"self", side:"karkh", name:"", phone:"", airline:"", flightNumber:"", date:"", time:"", passengers:1, bags:0, address:"", landmark:"", notes:"", payment:"cash", promoCode:"" };
 
 const copy = {
   ar: {
@@ -26,7 +28,8 @@ const copy = {
     travelerDetails:"تفاصيل المسافر", enterDetails:"أدخل معلومات رحلتك", fullName:"الاسم الكامل", namePlaceholder:"الاسم الثلاثي", phone:"رقم الهاتف", airline:"شركة الطيران", selectAirline:"اختر شركة الطيران", otherAirline:"شركة طيران أخرى", flight:"رقم الرحلة", flightPlaceholder:"مثال: IA123", arrivalDate:"تاريخ الوصول", departureDate:"تاريخ المغادرة", arrivalTime:"وقت الوصول المتوقع", departureTime:"وقت الحضور المطلوب", passengers:"عدد المسافرين", bags:"عدد الحقائب", kids:"* الأطفال دون سن 12 سنة دخولهم مجانًا.", extraBags:"لديك أكثر من 4 حقائب، لذلك تُضاف رسوم خدمة قدرها 10,000 د.ع لتوفير عربة إضافية وعامل للمساعدة بالحقائب.", notes:"ملاحظات إضافية (اختياري)", notesPlaceholder:"أي تفاصيل تساعدنا في ترتيب تجربتك...",
     uploadTitle:"عندك تذكرة جاهزة؟", uploadText:"ارفع صورة التذكرة أو ملف PDF ونعبّي معلومات الرحلة تلقائياً.", uploadButton:"ارفع التذكرة", readingTicket:"جارٍ قراءة التذكرة...", ticketReady:"تمت قراءة التذكرة. راجع المعلومات وأكمل الحجز.", manualDivider:"أو أكمل الحجز يدوياً", ticketError:"تعذرت قراءة التذكرة. يمكنك تعبئة المعلومات يدوياً.",
     lastStep:"الخطوة الأخيرة", payment:"اختر طريقة الدفع", cash:"الدفع كاش", cashDesc:"الدفع نقداً عند تأكيد وتقديم الخدمة", wayl:"الدفع الإلكتروني", waylDesc:"دفع آمن إلكترونياً عن طريق Wayl", back:"رجوع", next:"التالي", booking:"تأكيد الحجز", bookingNow:"جاري الحجز", genericError:"تعذر إتمام الحجز، يرجى التأكد من المعلومات والمحاولة مرة أخرى",
-    summary:"ملخص الحجز", experience:"تجربة لاونج بغداد", tripType:"نوع الرحلة", postArrival:"التوصيل بعد الوصول", airportAccess:"الوصول للمطار", withoutCar:"بدون سيارة", personalArrival:"وصول شخصي", peopleOne:"شخص", peopleMany:"أشخاص", bag:"حقيبة", appointment:"الموعد", loungeEntry:"دخول الصالة", car:"السيارة الخاصة", extraBagService:"خدمة حقائب إضافية", total:"المجموع", footerNote:"دخول الصالة: 40,000 د.ع للشخص. الأطفال دون سن 12 سنة مجانًا. سعر السيارة ثابت للكرخ أو الرصافة. يخضع الحجز للتأكيد النهائي من فريقنا.",
+    promoTitle:"رمز خصم الشركات", promoText:"إذا كانت شركتك متعاقدة ويانا، أدخل الرمز الخاص بها.", promoPlaceholder:"أدخل رمز الخصم", applyPromo:"تطبيق", promoApplied:"تم تفعيل خصم الشركات 10% بنجاح.", promoInvalid:"رمز الخصم غير صحيح أو غير فعّال.", discount:"خصم الشركات",
+    summary:"ملخص الحجز", experience:"تجربة لاونج بغداد", tripType:"نوع الرحلة", postArrival:"التوصيل بعد الوصول", airportAccess:"الوصول للمطار", withoutCar:"بدون سيارة", personalArrival:"وصول شخصي", peopleOne:"شخص", peopleMany:"أشخاص", bag:"حقيبة", appointment:"الموعد", loungeEntry:"دخول الصالة", car:"السيارة الخاصة", extraBagService:"خدمة حقائب إضافية", total:"المجموع النهائي", footerNote:"دخول الصالة: 40,000 د.ع للشخص. الأطفال دون سن 12 سنة مجانًا. سعر السيارة ثابت للكرخ أو الرصافة. يخضع الحجز للتأكيد النهائي من فريقنا.",
   },
   en: {
     successLabel:"Your booking request has been received", successTitle:"Thank you for choosing Lounge Baghdad", successText:"Our team will contact you to confirm the booking details. Please keep your booking reference:",
@@ -37,7 +40,8 @@ const copy = {
     travelerDetails:"Traveler details", enterDetails:"Enter your flight information", fullName:"Full name", namePlaceholder:"Full name", phone:"Phone number", airline:"Airline", selectAirline:"Select airline", otherAirline:"Other airline", flight:"Flight number", flightPlaceholder:"Example: IA123", arrivalDate:"Arrival date", departureDate:"Departure date", arrivalTime:"Expected arrival time", departureTime:"Required pickup time", passengers:"Passengers", bags:"Bags", kids:"* Children under 12 enter free of charge.", extraBags:"More than 4 bags require an additional IQD 10,000 handling fee for an extra trolley and baggage assistant.", notes:"Additional notes (optional)", notesPlaceholder:"Any details that help us arrange your experience...",
     uploadTitle:"Have your ticket ready?", uploadText:"Upload a ticket image or PDF and we will fill in the flight details automatically.", uploadButton:"Upload ticket", readingTicket:"Reading your ticket...", ticketReady:"Ticket read successfully. Review the details and continue.", manualDivider:"or continue manually", ticketError:"We could not read the ticket. You can enter the details manually.",
     lastStep:"Final step", payment:"Choose payment method", cash:"Cash payment", cashDesc:"Pay in cash when the service is confirmed and provided", wayl:"Online payment", waylDesc:"Secure online payment via Wayl", back:"Back", next:"Next", booking:"Confirm booking", bookingNow:"Booking...", genericError:"We could not complete the booking. Please check your information and try again.",
-    summary:"Booking summary", experience:"Lounge Baghdad experience", tripType:"Trip type", postArrival:"Transfer after arrival", airportAccess:"Airport access", withoutCar:"No car", personalArrival:"Self arrival", peopleOne:"person", peopleMany:"people", bag:"bag", appointment:"Date & time", loungeEntry:"Lounge entry", car:"Private car", extraBagService:"Extra baggage handling", total:"Total", footerNote:"Lounge entry: IQD 40,000 per person. Children under 12 enter free. Private car pricing is fixed for Karkh or Rusafa. All bookings are subject to final confirmation by our team.",
+    promoTitle:"Company promo code", promoText:"If your company partners with us, enter its promo code.", promoPlaceholder:"Enter promo code", applyPromo:"Apply", promoApplied:"Your 10% company discount is active.", promoInvalid:"This promo code is invalid or inactive.", discount:"Company discount",
+    summary:"Booking summary", experience:"Lounge Baghdad experience", tripType:"Trip type", postArrival:"Transfer after arrival", airportAccess:"Airport access", withoutCar:"No car", personalArrival:"Self arrival", peopleOne:"person", peopleMany:"people", bag:"bag", appointment:"Date & time", loungeEntry:"Lounge entry", car:"Private car", extraBagService:"Extra baggage handling", total:"Final total", footerNote:"Lounge entry: IQD 40,000 per person. Children under 12 enter free. Private car pricing is fixed for Karkh or Rusafa. All bookings are subject to final confirmation by our team.",
   }
 } as const;
 
@@ -49,12 +53,16 @@ export function BookingExperience({lang}:{lang:Lang}) {
   const [loading,setLoading] = useState(false);
   const [extracting,setExtracting] = useState(false);
   const [ticketMessage,setTicketMessage] = useState<{type:"success"|"error";text:string}|null>(null);
+  const [promoStatus,setPromoStatus] = useState<"idle"|"valid"|"invalid">("idle");
   const [error,setError] = useState("");
   const [result,setResult] = useState<{reference:string; paymentUrl?:string}|null>(null);
   const loungeTotal = form.passengers * 40000;
   const carTotal = form.transport === "chauffeur" ? 75000 : 0;
   const extraBaggageTotal = form.bags > 4 ? 10000 : 0;
-  const total = loungeTotal + carTotal + extraBaggageTotal;
+  const subtotal = loungeTotal + carTotal + extraBaggageTotal;
+  const promoActive = promoStatus === "valid" && isValidPromoCode(form.promoCode);
+  const discount = promoActive ? Math.round(subtotal * COMPANY_PROMO_PERCENT / 100) : 0;
+  const total = subtotal - discount;
   const money = (n:number) => lang === "ar" ? new Intl.NumberFormat("ar-IQ").format(n) + " د.ع" : "IQD " + new Intl.NumberFormat("en-US").format(n);
   const patch = <K extends keyof FormState>(key:K,value:FormState[K]) => setForm(v=>({...v,[key]:value}));
 
@@ -67,6 +75,7 @@ export function BookingExperience({lang}:{lang:Lang}) {
   async function submit() {
     setLoading(true); setError("");
     try {
+      if(form.promoCode && !promoActive) throw new Error(t.promoInvalid);
       const response = await fetch("/api/bookings", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(form) });
       const data = await response.json();
       if(!response.ok) throw new Error(lang === "ar" ? (data.error || t.genericError) : t.genericError);
@@ -74,6 +83,16 @@ export function BookingExperience({lang}:{lang:Lang}) {
       if(data.paymentUrl) window.location.href = data.paymentUrl;
     } catch(e) { setError(e instanceof Error ? e.message : t.genericError); }
     finally { setLoading(false); }
+  }
+
+  function applyPromo() {
+    if(isValidPromoCode(form.promoCode)) {
+      patch("promoCode",COMPANY_PROMO_CODE);
+      setPromoStatus("valid");
+      setError("");
+    } else {
+      setPromoStatus("invalid");
+    }
   }
 
   async function extractTicket(file?: File) {
@@ -182,6 +201,17 @@ export function BookingExperience({lang}:{lang:Lang}) {
                 <Choice rtl={rtl} active={form.payment==="cash"} onClick={()=>patch("payment","cash")} icon={<Banknote/>} title={t.cash} desc={t.cashDesc} />
                 <Choice rtl={rtl} active={form.payment==="wayl"} onClick={()=>patch("payment","wayl")} icon={<CreditCard/>} title={t.wayl} desc={t.waylDesc} />
               </div>
+              <div className="mt-5 rounded-xl border border-[#d2bb8b]/45 bg-[#fbf8f1] p-4 text-[#081a2b] sm:p-5">
+                <div className="flex items-start gap-3">
+                  <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[#081a2b] text-[#d2bb8b]"><Tag size={17}/></span>
+                  <div><h4 className="text-sm font-semibold">{t.promoTitle}</h4><p className="mt-1 text-[11px] leading-5 text-[#71818e]">{t.promoText}</p></div>
+                </div>
+                <div className="mt-4 flex gap-2">
+                  <input className="field min-w-0 flex-1 uppercase" dir="ltr" autoComplete="off" placeholder={t.promoPlaceholder} value={form.promoCode} onChange={e=>{patch("promoCode",e.target.value.toUpperCase());setPromoStatus("idle");}} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();applyPromo();}}}/>
+                  <button type="button" onClick={applyPromo} className="min-w-24 rounded-lg bg-[#081a2b] px-4 text-xs font-semibold text-white">{t.applyPromo}</button>
+                </div>
+                {promoStatus!=="idle"&&<p role="status" className={`mt-3 text-[11px] ${promoStatus==="valid"?"text-emerald-700":"text-red-600"}`}>{promoStatus==="valid"?t.promoApplied:t.promoInvalid}</p>}
+              </div>
               {error&&<div role="alert" className="mt-5 border border-red-500/30 bg-red-950/20 px-4 py-3 text-sm text-red-300">{error}</div>}
             </div>}
 
@@ -207,6 +237,7 @@ export function BookingExperience({lang}:{lang:Lang}) {
               <div className="flex justify-between gap-4"><span>{t.loungeEntry} × {form.passengers}</span><span>{money(loungeTotal)}</span></div>
               {carTotal>0&&<div className="flex justify-between gap-4"><span>{t.car}</span><span>{money(carTotal)}</span></div>}
               {extraBaggageTotal>0&&<div className="flex justify-between gap-4"><span>{t.extraBagService}</span><span>{money(extraBaggageTotal)}</span></div>}
+              {discount>0&&<div className="flex justify-between gap-4 text-emerald-300"><span>{t.discount} ({COMPANY_PROMO_PERCENT}%)</span><span>− {money(discount)}</span></div>}
             </div>
             <div className="mt-5 flex items-end justify-between gap-4 border-t border-dashed border-white/15 pt-5"><span className="text-sm">{t.total}</span><strong className="text-xl text-[#d2bb8b]">{money(total)}</strong></div>
             <p className="mt-6 text-[10px] leading-5 text-[#71818e]">{t.footerNote}</p>

@@ -10,11 +10,11 @@ export async function POST(request: Request) {
     }
     const booking = parsed.data;
     const reference = bookingReference();
-    const { total } = totals(booking);
-    await saveBooking(reference, booking, total);
-    const paymentUrl = booking.payment === "wayl" ? await createWaylPayment(reference, booking, total) : undefined;
-    await notifyTelegram(reference, booking, total);
-    return Response.json({ reference, paymentUrl }, { status: 201 });
+    const pricing = totals(booking);
+    await saveBooking(reference, booking, pricing);
+    const paymentUrl = booking.payment === "wayl" ? await createWaylPayment(reference, booking, pricing.total) : undefined;
+    await notifyTelegram(reference, booking, pricing);
+    return Response.json({ reference, paymentUrl, pricing }, { status: 201 });
   } catch (error) {
     console.error("Booking creation failed", error);
     return Response.json({ error: error instanceof Error ? error.message : "حدث خطأ أثناء الحجز، حاول مرة أخرى" }, { status: 500 });
