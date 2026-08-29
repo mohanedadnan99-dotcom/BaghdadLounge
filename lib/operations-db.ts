@@ -11,38 +11,45 @@ export type LoungeSetting={id:string;name:string;active:boolean;price_iqd:number
 export type SystemMessage={id:number;text:string;active:boolean;created_at:string};
 export type WatchItem={id:number;kind:"phone"|"captain"|"company";value:string;note:string;active:boolean;created_at:string};
 
+let operationsInit:Promise<void>|null=null;
 export async function ensureOperationsTables(){
-  const db=sql();
-  await db`CREATE TABLE IF NOT EXISTS lounge_settings(
-    id TEXT PRIMARY KEY,name TEXT NOT NULL,active BOOLEAN NOT NULL DEFAULT TRUE,price_iqd INTEGER NOT NULL DEFAULT 0,
-    note TEXT NOT NULL DEFAULT '',sort_order INTEGER NOT NULL DEFAULT 0,updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-  )`;
-  const defaults=[
-    {id:"samarra",name:"صالة سامراء",sort:1},{id:"babylon",name:"صالة بابل",sort:2},{id:"nineveh",name:"صالة نينوى",sort:3}
-  ];
-  for(const item of defaults){
-    await db`INSERT INTO lounge_settings(id,name,sort_order) VALUES(${item.id},${item.name},${item.sort}) ON CONFLICT(id) DO NOTHING`;
-  }
-  await db`CREATE TABLE IF NOT EXISTS system_messages(
-    id BIGSERIAL PRIMARY KEY,text TEXT NOT NULL,active BOOLEAN NOT NULL DEFAULT TRUE,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-  )`;
-  await db`CREATE TABLE IF NOT EXISTS operations_watchlist(
-    id BIGSERIAL PRIMARY KEY,kind TEXT NOT NULL,value TEXT NOT NULL,note TEXT NOT NULL DEFAULT '',active BOOLEAN NOT NULL DEFAULT TRUE,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-  )`;
-  await db`CREATE INDEX IF NOT EXISTS operations_watchlist_value_idx ON operations_watchlist(value)`;
-  await db`CREATE TABLE IF NOT EXISTS company_accounts(
-    company_name TEXT PRIMARY KEY,price_per_passenger INTEGER NOT NULL DEFAULT 0,notes TEXT NOT NULL DEFAULT '',updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-  )`;
-  await db`CREATE TABLE IF NOT EXISTS company_payments(
-    id BIGSERIAL PRIMARY KEY,company_name TEXT NOT NULL,amount_iqd BIGINT NOT NULL CHECK(amount_iqd>0),note TEXT NOT NULL DEFAULT '',created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-  )`;
+  if(operationsInit)return operationsInit;
+  operationsInit=(async()=>{
+    const db=sql();
+    await db`CREATE TABLE IF NOT EXISTS lounge_settings(
+      id TEXT PRIMARY KEY,name TEXT NOT NULL,active BOOLEAN NOT NULL DEFAULT TRUE,price_iqd INTEGER NOT NULL DEFAULT 0,
+      note TEXT NOT NULL DEFAULT '',sort_order INTEGER NOT NULL DEFAULT 0,updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`;
+    const defaults=[
+      {id:"samarra",name:"صالة سامراء",sort:1},{id:"babylon",name:"صالة بابل",sort:2},{id:"nineveh",name:"صالة نينوى",sort:3}
+    ];
+    for(const item of defaults){
+      await db`INSERT INTO lounge_settings(id,name,sort_order) VALUES(${item.id},${item.name},${item.sort}) ON CONFLICT(id) DO NOTHING`;
+    }
+    await db`CREATE TABLE IF NOT EXISTS system_messages(
+      id BIGSERIAL PRIMARY KEY,text TEXT NOT NULL,active BOOLEAN NOT NULL DEFAULT TRUE,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`;
+    await db`CREATE TABLE IF NOT EXISTS operations_watchlist(
+      id BIGSERIAL PRIMARY KEY,kind TEXT NOT NULL,value TEXT NOT NULL,note TEXT NOT NULL DEFAULT '',active BOOLEAN NOT NULL DEFAULT TRUE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`;
+    await db`CREATE INDEX IF NOT EXISTS operations_watchlist_value_idx ON operations_watchlist(value)`;
+    await db`CREATE TABLE IF NOT EXISTS company_accounts(
+      company_name TEXT PRIMARY KEY,price_per_passenger INTEGER NOT NULL DEFAULT 0,notes TEXT NOT NULL DEFAULT '',updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`;
+    await db`CREATE TABLE IF NOT EXISTS company_payments(
+      id BIGSERIAL PRIMARY KEY,company_name TEXT NOT NULL,amount_iqd BIGINT NOT NULL CHECK(amount_iqd>0),note TEXT NOT NULL DEFAULT '',created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`;
+  })();
+  try{await operationsInit}catch(error){operationsInit=null;throw error}
 }
 
 export async function getPublicCaptainConfig(){
   await ensureOperationsTables();const db=sql();
-  const lounges=await db`SELECT id,name,active,price_iqd,note,sort_order FROM lounge_settings WHERE active=TRUE ORDER BY sort_order,name`;
-  const messages=await db`SELECT id,text,active,created_at FROM system_messages WHERE active=TRUE ORDER BY created_at DESC LIMIT 3`;
+  const [lounges,messages]=await Promise.all([
+    db`SELECT id,name,active,price_iqd,note,sort_order FROM lounge_settings WHERE active=TRUE ORDER BY sort_order,name`,
+    db`SELECT id,text,active,created_at FROM system_messages WHERE active=TRUE ORDER BY created_at DESC LIMIT 3`
+  ]);
   return {lounges:lounges as LoungeSetting[],messages:messages as SystemMessage[]};
 }
 
@@ -71,14 +78,16 @@ export async function getOperationsAdminData(){
       UNION SELECT captain_company AS name FROM captain_lounge_orders WHERE captain_company IS NOT NULL AND TRIM(captain_company)<>''
       UNION SELECT company_name AS name FROM company_promo_codes WHERE TRIM(company_name)<>''
       UNION SELECT company_name AS name FROM company_accounts
+    ), order_stats AS(
+      SELECT captain_company name,COUNT(*)::int orders,COALESCE(SUM(passengers),0)::int passengers
+      FROM captain_lounge_orders WHERE captain_company IS NOT NULL GROUP BY captain_company
+    ), pay_stats AS(
+      SELECT company_name name,COALESCE(SUM(amount_iqd),0)::bigint paid_iqd FROM company_payments GROUP BY company_name
     )
-    SELECT n.name,
-      COALESCE(a.price_per_passenger,0)::int AS price_per_passenger,COALESCE(a.notes,'') AS notes,
-      (SELECT COUNT(*) FROM captain_lounge_orders o WHERE o.captain_company=n.name)::int AS orders,
-      (SELECT COALESCE(SUM(passengers),0) FROM captain_lounge_orders o WHERE o.captain_company=n.name)::int AS passengers,
-      (SELECT COALESCE(SUM(amount_iqd),0) FROM company_payments p WHERE p.company_name=n.name)::bigint AS paid_iqd,
-      ((SELECT COALESCE(SUM(passengers),0) FROM captain_lounge_orders o WHERE o.captain_company=n.name)*COALESCE(a.price_per_passenger,0))::bigint AS due_iqd
-    FROM names n LEFT JOIN company_accounts a ON a.company_name=n.name ORDER BY n.name`,
+    SELECT n.name,COALESCE(a.price_per_passenger,0)::int AS price_per_passenger,COALESCE(a.notes,'') AS notes,
+      COALESCE(os.orders,0)::int orders,COALESCE(os.passengers,0)::int passengers,COALESCE(ps.paid_iqd,0)::bigint paid_iqd,
+      (COALESCE(os.passengers,0)*COALESCE(a.price_per_passenger,0))::bigint due_iqd
+    FROM names n LEFT JOIN company_accounts a ON a.company_name=n.name LEFT JOIN order_stats os ON os.name=n.name LEFT JOIN pay_stats ps ON ps.name=n.name ORDER BY n.name`,
     db`WITH all_orders AS(
       SELECT created_at,status,NULL::text AS lounge,NULL::text AS company FROM lounge_bookings WHERE archived_at IS NULL
       UNION ALL
