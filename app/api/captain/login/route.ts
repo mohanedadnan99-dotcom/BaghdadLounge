@@ -1,11 +1,15 @@
 import { createCaptainSession } from "@/lib/captain-auth";
 import { findCaptainByUsername, verifyCaptainPassword } from "@/lib/captain-db";
+import { readMaintenanceState } from "@/lib/maintenance";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
   try {
+    const maintenance = await readMaintenanceState();
+    if (maintenance.captain) return Response.json({ message: "بوابة الكباتن متوقفة مؤقتاً من الإدارة. يرجى المحاولة لاحقاً." }, { status: 503 });
+
     const body = await request.json() as { username?: string; password?: string };
     const username = body.username?.trim().toLowerCase() || "";
     const password = body.password || "";
