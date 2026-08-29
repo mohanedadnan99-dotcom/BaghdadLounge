@@ -1,25 +1,37 @@
 import { neon } from "@neondatabase/serverless";
 import type { BookingInput, BookingTotals } from "./booking";
 
+function connection(){return process.env.DATABASE_URL || process.env.POSTGRES_URL || process.env.NEON_DATABASE_URL || ""}
+let bookingSchemaInit:Promise<void>|null=null;
+async function ensureBookingSchema(){
+  const value=connection();if(!value)return;
+  if(bookingSchemaInit)return bookingSchemaInit;
+  bookingSchemaInit=(async()=>{
+    const sql=neon(value);
+    await sql`CREATE TABLE IF NOT EXISTS lounge_bookings (
+      id BIGSERIAL PRIMARY KEY, reference TEXT UNIQUE NOT NULL, customer_name TEXT NOT NULL,
+      phone TEXT NOT NULL, airline TEXT, flight_number TEXT NOT NULL, trip_type TEXT NOT NULL,
+      transport TEXT NOT NULL, city_side TEXT, address TEXT, landmark TEXT,
+      booking_date DATE NOT NULL, booking_time TIME NOT NULL, passengers INTEGER NOT NULL,
+      bags INTEGER NOT NULL, notes TEXT, payment_method TEXT NOT NULL,
+      payment_status TEXT NOT NULL DEFAULT 'pending', total_iqd INTEGER NOT NULL,
+      promo_code TEXT, promo_company TEXT, promo_percent INTEGER NOT NULL DEFAULT 0, discount_iqd INTEGER NOT NULL DEFAULT 0,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`;
+    await sql`ALTER TABLE lounge_bookings ADD COLUMN IF NOT EXISTS airline TEXT`;
+    await sql`ALTER TABLE lounge_bookings ADD COLUMN IF NOT EXISTS promo_code TEXT`;
+    await sql`ALTER TABLE lounge_bookings ADD COLUMN IF NOT EXISTS promo_company TEXT`;
+    await sql`ALTER TABLE lounge_bookings ADD COLUMN IF NOT EXISTS promo_percent INTEGER NOT NULL DEFAULT 0`;
+    await sql`ALTER TABLE lounge_bookings ADD COLUMN IF NOT EXISTS discount_iqd INTEGER NOT NULL DEFAULT 0`;
+  })();
+  try{await bookingSchemaInit}catch(error){bookingSchemaInit=null;throw error}
+}
+
 export async function saveBooking(reference: string, booking: BookingInput, pricing: BookingTotals) {
-  const connection = process.env.DATABASE_URL || process.env.POSTGRES_URL || process.env.NEON_DATABASE_URL;
-  if (!connection) return;
-  const sql = neon(connection);
-  await sql`CREATE TABLE IF NOT EXISTS lounge_bookings (
-    id BIGSERIAL PRIMARY KEY, reference TEXT UNIQUE NOT NULL, customer_name TEXT NOT NULL,
-    phone TEXT NOT NULL, airline TEXT, flight_number TEXT NOT NULL, trip_type TEXT NOT NULL,
-    transport TEXT NOT NULL, city_side TEXT, address TEXT, landmark TEXT,
-    booking_date DATE NOT NULL, booking_time TIME NOT NULL, passengers INTEGER NOT NULL,
-    bags INTEGER NOT NULL, notes TEXT, payment_method TEXT NOT NULL,
-    payment_status TEXT NOT NULL DEFAULT 'pending', total_iqd INTEGER NOT NULL,
-    promo_code TEXT, promo_company TEXT, promo_percent INTEGER NOT NULL DEFAULT 0, discount_iqd INTEGER NOT NULL DEFAULT 0,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-  )`;
-  await sql`ALTER TABLE lounge_bookings ADD COLUMN IF NOT EXISTS airline TEXT`;
-  await sql`ALTER TABLE lounge_bookings ADD COLUMN IF NOT EXISTS promo_code TEXT`;
-  await sql`ALTER TABLE lounge_bookings ADD COLUMN IF NOT EXISTS promo_company TEXT`;
-  await sql`ALTER TABLE lounge_bookings ADD COLUMN IF NOT EXISTS promo_percent INTEGER NOT NULL DEFAULT 0`;
-  await sql`ALTER TABLE lounge_bookings ADD COLUMN IF NOT EXISTS discount_iqd INTEGER NOT NULL DEFAULT 0`;
+  const value=connection();
+  if (!value) throw new Error("قاعدة بيانات الحجوزات غير مفعلة");
+  await ensureBookingSchema();
+  const sql = neon(value);
   await sql`INSERT INTO lounge_bookings
     (reference, customer_name, phone, airline, flight_number, trip_type, transport, city_side, address, landmark, booking_date, booking_time, passengers, bags, notes, payment_method, promo_code, promo_company, promo_percent, discount_iqd, total_iqd)
     VALUES (${reference}, ${booking.name}, ${booking.phone}, ${booking.airline}, ${booking.flightNumber}, ${booking.tripType}, ${booking.transport}, ${booking.side}, ${booking.address}, ${booking.landmark}, ${booking.date}, ${booking.time}, ${booking.passengers}, ${booking.bags}, ${booking.notes}, ${booking.payment}, ${pricing.promoCode || null}, ${pricing.promoCompany || null}, ${pricing.promoPercent || 0}, ${pricing.discount}, ${pricing.total})`;
@@ -71,7 +83,7 @@ export async function notifyTelegram(reference: string, booking: BookingInput, p
 export async function createWaylPayment(reference: string, booking: BookingInput, total: number) {
   const apiKey = process.env.WAYL_API_KEY;
   if (!apiKey || apiKey.startsWith("(")) throw new Error("خدمة الدفع الإلكتروني غير مفعلة حالياً، اختر الدفع كاش أو تواصل معنا");
-  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
+  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://baghdad-lounge.vercel.app";
   const response = await fetch("https://api.thewayl.com/api/v1/links", {
     method: "POST", headers: { "Content-Type": "application/json", "X-WAYL-AUTHENTICATION": apiKey },
     body: JSON.stringify({ title: `Lounge Baghdad - ${reference}`, description: `حجز لاونج بغداد باسم ${booking.name}`,
