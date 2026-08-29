@@ -1,11 +1,15 @@
 import { bookingReference, bookingSchema, totals } from "@/lib/booking";
 import { createWaylPayment, notifyTelegram, saveBooking } from "@/lib/integrations";
 import { findValidPromoCode, recordPromoUse } from "@/lib/promo-db";
+import { maintenanceState } from "@/lib/admin-control-db";
 
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
   try {
+    const maintenance = await maintenanceState();
+    if (maintenance.booking) return Response.json({ error: "الحجز متوقف مؤقتاً من الإدارة. يرجى المحاولة لاحقاً." }, { status: 503 });
+
     const parsed = bookingSchema.safeParse(await request.json());
     if (!parsed.success) {
       const firstIssue = parsed.error.issues[0]?.message;
