@@ -1,15 +1,24 @@
 import { adminSessionFromRequest } from "@/lib/admin-auth";
-import { createBackup, dataQuality, governanceSummary, listAudit, listBackups, listMonthlyRuns, restoreBackup, writeAudit } from "@/lib/admin-governance-db";
+import { createBackup, dataQuality, listAudit, listBackups, listMonthlyRuns, restoreBackup, writeAudit } from "@/lib/admin-governance-db";
 import { runMonthlyInvoiceAutomation } from "@/lib/monthly-invoice-automation";
 
 export const runtime="nodejs";export const dynamic="force-dynamic";
 function auth(request:Request){const s=adminSessionFromRequest(request);if(!s)return null;if(!['owner','manager'].includes(s.role))return null;return s}
 const actor=(s:any)=>s?.name||s?.username||'admin';
 
-type C={at:number;value:any};const cache=new Map<string,C>();const TTL=15000;
-async function fast(key:string,fn:()=>Promise<any>){const hit=cache.get(key);if(hit&&Date.now()-hit.at<TTL)return hit.value;const value=await fn();cache.set(key,{at:Date.now(),value});return value}
+type C={at:number;value:Promise<any>};const cache=new Map<string,C>();const TTL=15000;
+async function fast(key:string,fn:()=>Promise<any>){const hit=cache.get(key);if(hit&&Date.now()-hit.at<TTL)return hit.value;const value=fn();cache.set(key,{at:Date.now(),value});try{return await value}catch(e){cache.delete(key);throw e}}
 function bust(){cache.clear()}
+async function safeSummary(){
+  // Keep governance schema setup serialized. The underlying audit setup touches triggers,
+  // so running the four readers in parallel can race on PostgreSQL DDL.
+  const quality=await dataQuality();
+  const backups=await listBackups();
+  const audit=await listAudit('',80);
+  const runs=await listMonthlyRuns();
+  return {quality,backups,audit,runs};
+}
 
-export async function GET(request:Request){const s=auth(request);if(!s)return Response.json({message:'غير مصرح'},{status:403});try{const u=new URL(request.url);const action=u.searchParams.get('action')||'summary';if(action==='summary')return Response.json(await fast('summary',governanceSummary),{headers:{'Cache-Control':'private, max-age=10'}});if(action==='quality')return Response.json(await fast('quality',async()=>({quality:await dataQuality()})));if(action==='audit')return Response.json({audit:await listAudit(u.searchParams.get('q')||'',Number(u.searchParams.get('limit')||200))});if(action==='backups')return Response.json(await fast('backups',async()=>({backups:await listBackups()})));if(action==='runs')return Response.json(await fast('runs',async()=>({runs:await listMonthlyRuns()})));return Response.json({message:'طلب غير معروف'},{status:400})}catch(e){console.error('Governance GET',e);return Response.json({message:e instanceof Error?e.message:'تعذر تحميل مركز الحوكمة'},{status:500})}}
+export async function GET(request:Request){const s=auth(request);if(!s)return Response.json({message:'غير مصرح'},{status:403});try{const u=new URL(request.url);const action=u.searchParams.get('action')||'summary';if(action==='summary')return Response.json(await fast('summary',safeSummary),{headers:{'Cache-Control':'private, max-age=10'}});if(action==='quality')return Response.json(await fast('quality',async()=>({quality:await dataQuality()})));if(action==='audit')return Response.json({audit:await listAudit(u.searchParams.get('q')||'',Number(u.searchParams.get('limit')||200))});if(action==='backups')return Response.json(await fast('backups',async()=>({backups:await listBackups()})));if(action==='runs')return Response.json(await fast('runs',async()=>({runs:await listMonthlyRuns()})));return Response.json({message:'طلب غير معروف'},{status:400})}catch(e){console.error('Governance GET',e);return Response.json({message:e instanceof Error?e.message:'تعذر تحميل مركز الحوكمة'},{status:500})}}
 
 export async function POST(request:Request){const s=auth(request);if(!s)return Response.json({message:'غير مصرح'},{status:403});try{const b=await request.json() as Record<string,unknown>;const action=String(b.action||'');if(action==='backup'){if(s.role!=='owner')return Response.json({message:'إنشاء النسخ الاحتياطية مخصص للمالك'},{status:403});const backup=await createBackup(String(b.label||'').trim(),actor(s));await writeAudit({table:'admin_backups',action:'CREATE_BACKUP',key:String((backup as any).id),actor:actor(s),newData:backup});bust();return Response.json({backup},{status:201})}if(action==='restore'){if(s.role!=='owner')return Response.json({message:'الاسترجاع مخصص للمالك'},{status:403});const result=await restoreBackup(Number(b.id),actor(s),String(b.confirmation||''));bust();return Response.json(result)}if(action==='monthlyInvoices'){if(s.role!=='owner')return Response.json({message:'التشغيل اليدوي للفوترة مخصص للمالك'},{status:403});const run=await runMonthlyInvoiceAutomation(actor(s),Boolean(b.force));bust();return Response.json({run})}return Response.json({message:'إجراء غير معروف'},{status:400})}catch(e){console.error('Governance POST',e);return Response.json({message:e instanceof Error?e.message:'تعذر تنفيذ الإجراء'},{status:500})}}
