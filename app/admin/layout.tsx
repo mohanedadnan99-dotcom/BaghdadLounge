@@ -1,10 +1,11 @@
 import Link from "next/link";
-import { BrainCircuit, Command, DatabaseZap, Gauge, Settings2, ShieldCheck, WalletCards } from "lucide-react";
+import { BrainCircuit, Command, DatabaseZap, Gauge, Settings2, ShieldCheck, WalletCards, Wrench } from "lucide-react";
 
 export default function AdminLayout({children}:{children:React.ReactNode}){
   return <>
     {children}
     <div className="fixed bottom-24 left-4 z-40 flex flex-col gap-2 print:hidden">
+      <Link href="/admin/maintenance" aria-label="إدارة الصيانة" className="grid size-12 place-items-center rounded-full border border-white/20 bg-[#8a2d2d] text-white shadow-xl"><Wrench className="size-5"/></Link>
       <Link href="/admin/intelligence" aria-label="مركز الذكاء الإداري" className="grid size-12 place-items-center rounded-full border border-white/20 bg-[#142b4a] text-[#f0c77f] shadow-xl"><BrainCircuit className="size-5"/></Link>
       <Link href="/admin/governance" aria-label="الحوكمة والموثوقية" className="grid size-12 place-items-center rounded-full border border-white/20 bg-[#302b63] text-[#f0c77f] shadow-xl"><DatabaseZap className="size-5"/></Link>
       <Link href="/admin/security" aria-label="الأمان والتشغيل اليومي" className="grid size-12 place-items-center rounded-full border border-white/20 bg-[#4b254f] text-[#f0c77f] shadow-xl"><ShieldCheck className="size-5"/></Link>
