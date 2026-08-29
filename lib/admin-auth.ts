@@ -1,8 +1,11 @@
 import { createHmac, scryptSync, timingSafeEqual } from "node:crypto";
+import type { AdminRole } from "./admin-users-db";
 
 const ADMIN_USERNAME = "admin";
 const ADMIN_SALT = "baghdad-lounge-admin-v1";
 const ADMIN_PASSWORD_HASH = "f5e801be047d934f108e5c26ed8c414a7fc90d000101a744604fbe55991fd3a9d304aaa8ae7bf7a3f0c84c4c3dbd4adfa14aaf1684f6800515a4b7b22e58f69e";
+
+export type AdminSession={role:AdminRole;exp:number;userId?:number;name?:string;username?:string;legacy?:boolean};
 
 function secret() {
   const value = process.env.CAPTAIN_SESSION_SECRET || process.env.TELEGRAM_BOT_TOKEN;
@@ -17,28 +20,41 @@ export function verifyAdminCredentials(username: string, password: string) {
   return actual.length === expected.length && timingSafeEqual(actual, expected);
 }
 
-export function createAdminSession() {
-  const payload = Buffer.from(JSON.stringify({ role: "captain-admin", exp: Date.now() + 8 * 60 * 60 * 1000 })).toString("base64url");
+export function createAdminSession(input?:Partial<AdminSession>) {
+  const data:AdminSession={role:input?.role||"owner",exp:Date.now()+8*60*60*1000,userId:input?.userId,name:input?.name,username:input?.username,legacy:input?.legacy};
+  const payload = Buffer.from(JSON.stringify(data)).toString("base64url");
   const signature = createHmac("sha256", secret()).update(payload).digest("base64url");
   return `${payload}.${signature}`;
 }
 
-export function verifyAdminSession(token: string) {
+export function readAdminSession(token:string):AdminSession|null{
   try {
     const [payload, signature] = token.split(".");
-    if (!payload || !signature) return false;
+    if (!payload || !signature) return null;
     const expected = createHmac("sha256", secret()).update(payload).digest("base64url");
     const actualBuffer = Buffer.from(signature);
     const expectedBuffer = Buffer.from(expected);
-    if (actualBuffer.length !== expectedBuffer.length || !timingSafeEqual(actualBuffer, expectedBuffer)) return false;
-    const data = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as { role?: string; exp?: number };
-    return data.role === "captain-admin" && typeof data.exp === "number" && data.exp > Date.now();
-  } catch {
-    return false;
-  }
+    if (actualBuffer.length !== expectedBuffer.length || !timingSafeEqual(actualBuffer, expectedBuffer)) return null;
+    const data = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as AdminSession|{role?:string;exp?:number};
+    if(typeof data.exp!=="number"||data.exp<=Date.now())return null;
+    if((data as any).role==="captain-admin")return {role:"owner",exp:data.exp,legacy:true};
+    if(!["owner","manager","reception","accountant"].includes(String(data.role)))return null;
+    return data as AdminSession;
+  } catch { return null; }
 }
 
+export function verifyAdminSession(token: string) { return Boolean(readAdminSession(token)); }
 export function adminTokenFromRequest(request: Request) {
   const value = request.headers.get("authorization") || "";
   return value.startsWith("Bearer ") ? value.slice(7) : "";
+}
+export function adminSessionFromRequest(request:Request){return readAdminSession(adminTokenFromRequest(request))}
+export function roleCan(role:AdminRole,permission:"orders"|"operations"|"captains"|"promos"|"finance"|"users"|"settings"){
+  if(role==="owner")return true;
+  const matrix:Record<Exclude<AdminRole,"owner">,Set<string>>={
+    manager:new Set(["orders","operations","captains","promos","finance"]),
+    reception:new Set(["orders","operations"]),
+    accountant:new Set(["finance","orders"]),
+  };
+  return matrix[role].has(permission);
 }
