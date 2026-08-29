@@ -62,8 +62,26 @@ export async function companyStatement(companyName:string,from:string,to:string)
   await ensureOperationsTables();const db=sql();
   const account=await db`SELECT company_name,price_per_passenger,notes FROM company_accounts WHERE company_name=${companyName} LIMIT 1`;
   const price=Number(account[0]?.price_per_passenger||0);
-  const orders=await db`SELECT reference,captain_name,captain_phone,lounge_name,passengers,bags,carts,passenger_phone,status,created_at FROM captain_lounge_orders WHERE captain_company=${companyName} AND created_at>=${from}::timestamptz AND created_at<(${to}::timestamptz+INTERVAL '1 day') ORDER BY created_at`;
-  const payments=await db`SELECT id::int,amount_iqd,note,created_at FROM company_payments WHERE company_name=${companyName} AND created_at>=${from}::timestamptz AND created_at<(${to}::timestamptz+INTERVAL '1 day') ORDER BY created_at`;
-  const passengers=orders.reduce((s:any,o:any)=>s+Number(o.passengers||0),0);const due=passengers*price;const paid=payments.reduce((s:any,p:any)=>s+Number(p.amount_iqd||0),0);
-  return {companyName,from,to,pricePerPassenger:price,orders,passengers,dueIqd:due,payments,paidIqd:paid,balanceIqd:due-paid,notes:String(account[0]?.notes||"")};
+  const start=`${from}T00:00:00+03:00`;const end=`${to}T23:59:59.999+03:00`;
+  const [orders,payments,openingOrders,openingPayments,promoBookings]=await Promise.all([
+    db`SELECT reference,captain_name,captain_phone,lounge_name,passengers,bags,carts,passenger_phone,status,created_at FROM captain_lounge_orders WHERE captain_company=${companyName} AND created_at>=${start}::timestamptz AND created_at<=${end}::timestamptz ORDER BY created_at`,
+    db`SELECT id::int,amount_iqd::bigint,note,created_at FROM company_payments WHERE company_name=${companyName} AND created_at>=${start}::timestamptz AND created_at<=${end}::timestamptz ORDER BY created_at`,
+    db`SELECT COALESCE(SUM(passengers),0)::bigint AS passengers FROM captain_lounge_orders WHERE captain_company=${companyName} AND status<>'cancelled' AND created_at<${start}::timestamptz`,
+    db`SELECT COALESCE(SUM(amount_iqd),0)::bigint AS paid FROM company_payments WHERE company_name=${companyName} AND created_at<${start}::timestamptz`,
+    db`SELECT b.reference,b.customer_name,b.phone,b.passengers,b.total_iqd,b.discount_iqd,b.created_at,p.code FROM lounge_bookings b JOIN company_promo_codes p ON UPPER(p.code)=UPPER(b.promo_code) WHERE p.company_name=${companyName} AND b.created_at>=${start}::timestamptz AND b.created_at<=${end}::timestamptz ORDER BY b.created_at`
+  ]);
+  const billableOrders=(orders as any[]).filter(o=>String(o.status)!=="cancelled");
+  const passengers=billableOrders.reduce((sum,o)=>sum+Number(o.passengers||0),0);
+  const periodDue=passengers*price;
+  const periodPaid=(payments as any[]).reduce((sum,p)=>sum+Number(p.amount_iqd||0),0);
+  const openingDue=Number(openingOrders[0]?.passengers||0)*price;
+  const openingPaid=Number(openingPayments[0]?.paid||0);
+  const openingBalance=openingDue-openingPaid;
+  const closingBalance=openingBalance+periodDue-periodPaid;
+  return {
+    companyName,from,to,pricePerPassenger:price,notes:String(account[0]?.notes||""),
+    opening:{passengers:Number(openingOrders[0]?.passengers||0),dueIqd:openingDue,paidIqd:openingPaid,balanceIqd:openingBalance},
+    orders,passengers,dueIqd:periodDue,payments,paidIqd:periodPaid,balanceIqd:periodDue-periodPaid,closingBalanceIqd:closingBalance,
+    promoBookings,promoBookingsCount:(promoBookings as any[]).length,promoPassengers:(promoBookings as any[]).reduce((s,o)=>s+Number(o.passengers||0),0),promoDiscountIqd:(promoBookings as any[]).reduce((s,o)=>s+Number(o.discount_iqd||0),0)
+  };
 }
