@@ -5,7 +5,7 @@ const ADMIN_USERNAME = "admin";
 const ADMIN_SALT = "baghdad-lounge-admin-v1";
 const ADMIN_PASSWORD_HASH = "f5e801be047d934f108e5c26ed8c414a7fc90d000101a744604fbe55991fd3a9d304aaa8ae7bf7a3f0c84c4c3dbd4adfa14aaf1684f6800515a4b7b22e58f69e";
 
-export type AdminSession={role:AdminRole;exp:number;userId?:number;name?:string;username?:string;legacy?:boolean};
+export type AdminSession={role:AdminRole;exp:number;userId?:number;name?:string;username?:string;legacy?:boolean;sessionId?:string};
 
 function secret() {
   const value = process.env.CAPTAIN_SESSION_SECRET || process.env.TELEGRAM_BOT_TOKEN;
@@ -21,7 +21,7 @@ export function verifyAdminCredentials(username: string, password: string) {
 }
 
 export function createAdminSession(input?:Partial<AdminSession>) {
-  const data:AdminSession={role:input?.role||"owner",exp:Date.now()+8*60*60*1000,userId:input?.userId,name:input?.name,username:input?.username,legacy:input?.legacy};
+  const data:AdminSession={role:input?.role||"owner",exp:Date.now()+8*60*60*1000,userId:input?.userId,name:input?.name,username:input?.username,legacy:input?.legacy,sessionId:input?.sessionId};
   const payload = Buffer.from(JSON.stringify(data)).toString("base64url");
   const signature = createHmac("sha256", secret()).update(payload).digest("base64url");
   return `${payload}.${signature}`;
