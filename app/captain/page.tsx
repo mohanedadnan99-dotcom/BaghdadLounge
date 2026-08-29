@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import CaptainPortal from "./portal";
+import { MaintenanceScreen } from "@/components/maintenance-screen";
+import { readMaintenanceState } from "@/lib/maintenance";
 
 export const metadata: Metadata = {
   title: "بوابة الكباتن",
@@ -7,6 +9,10 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-export default function CaptainPage() {
+export const dynamic = "force-dynamic";
+
+export default async function CaptainPage() {
+  const maintenance = await readMaintenanceState();
+  if (maintenance.captain) return <MaintenanceScreen kind="captain" />;
   return <CaptainPortal />;
 }
