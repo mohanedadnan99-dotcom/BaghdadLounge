@@ -5,8 +5,9 @@ import EnterpriseAdminV2 from "./enterprise-v2";
 type Role="owner"|"manager"|"reception"|"accountant";
 function readRole(token:string):Role|null{
   try{
-    const payload=token.split(".")[0];if(!payload)return null;
-    const data=JSON.parse(atob(payload.replace(/-/g,"+").replace(/_/g,"/"))) as {role?:string};
+    const raw=token.split(".")[0];if(!raw)return null;
+    const base64=raw.replace(/-/g,"+").replace(/_/g,"/").padEnd(Math.ceil(raw.length/4)*4,"=");
+    const data=JSON.parse(atob(base64)) as {role?:string};
     return ["owner","manager","reception","accountant"].includes(String(data.role))?data.role as Role:null;
   }catch{return null}
 }
