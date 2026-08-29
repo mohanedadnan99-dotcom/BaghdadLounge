@@ -1,8 +1,10 @@
-import { adminTokenFromRequest, verifyAdminSession } from "@/lib/admin-auth";
+import { adminSessionFromRequest } from "@/lib/admin-auth";
 import { listOrderActivity } from "@/lib/admin-ops-db";
 export const runtime="nodejs"; export const dynamic="force-dynamic";
 export async function GET(request:Request){
-  if(!verifyAdminSession(adminTokenFromRequest(request))) return Response.json({message:"غير مصرح"},{status:401});
+  const session=adminSessionFromRequest(request);
+  if(!session)return Response.json({message:"غير مصرح"},{status:401});
+  if(!["owner","manager"].includes(session.role))return Response.json({message:"لا تملك صلاحية سجل النشاط"},{status:403});
   try{
     const {searchParams}=new URL(request.url);
     const reference=searchParams.get("reference")||undefined;
