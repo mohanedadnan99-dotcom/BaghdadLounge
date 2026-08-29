@@ -1,6 +1,7 @@
 import { adminSessionFromRequest, roleCan } from "@/lib/admin-auth";
 import { listCompanies360 } from "@/lib/admin-control-db";
 import { addInvoicePayment, businessSummary, companyCreditDecision, createInvoice, customer360, customers360, getInvoice, listInvoices, profitability, saveCost, voidInvoice } from "@/lib/business-suite-db";
+import { createApproval } from "@/lib/admin-security-db";
 
 export const runtime="nodejs";export const dynamic="force-dynamic";
 function session(request:Request){const s=adminSessionFromRequest(request);if(!s)return null;if(!(roleCan(s.role,'finance')||s.role==='manager'||s.role==='owner'))return null;return s}
@@ -31,4 +32,17 @@ export async function POST(request:Request){
   }catch(e){console.error(e);return Response.json({message:e instanceof Error?e.message:'تعذر تنفيذ الإجراء'},{status:500})}
 }
 
-export async function PATCH(request:Request){const s=session(request);if(!s)return Response.json({message:'غير مصرح'},{status:403});try{const b=await request.json() as Record<string,unknown>;if(String(b.action)==='voidInvoice'){if(s.role!=='owner'&&s.role!=='manager')return Response.json({message:'لا تملك صلاحية إلغاء الفاتورة'},{status:403});return Response.json({invoice:await voidInvoice(Number(b.id))})}return Response.json({message:'إجراء غير معروف'},{status:400})}catch(e){return Response.json({message:e instanceof Error?e.message:'تعذر التنفيذ'},{status:500})}}
+export async function PATCH(request:Request){
+  const s=session(request);if(!s)return Response.json({message:'غير مصرح'},{status:403});
+  try{const b=await request.json() as Record<string,unknown>;
+    if(String(b.action)==='voidInvoice'){
+      if(s.role==='manager'){
+        const id=Number(b.id);const approval=await createApproval({kind:'void_invoice',entityKey:String(id),title:`إلغاء فاتورة #${id}`,payload:{invoiceId:id},requestedBy:actor(s),requestedRole:s.role});
+        return Response.json({pendingApproval:true,approval,message:'تم إرسال طلب إلغاء الفاتورة لموافقة المالك'},{status:202});
+      }
+      if(s.role!=='owner')return Response.json({message:'لا تملك صلاحية إلغاء الفاتورة'},{status:403});
+      return Response.json({invoice:await voidInvoice(Number(b.id))})
+    }
+    return Response.json({message:'إجراء غير معروف'},{status:400})
+  }catch(e){return Response.json({message:e instanceof Error?e.message:'تعذر التنفيذ'},{status:500})}
+}
