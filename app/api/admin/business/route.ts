@@ -1,4 +1,5 @@
 import { adminSessionFromRequest, roleCan } from "@/lib/admin-auth";
+import { listCompanies360 } from "@/lib/admin-control-db";
 import { addInvoicePayment, businessSummary, companyCreditDecision, createInvoice, customer360, customers360, getInvoice, listInvoices, profitability, saveCost, voidInvoice } from "@/lib/business-suite-db";
 
 export const runtime="nodejs";export const dynamic="force-dynamic";
@@ -9,6 +10,7 @@ export async function GET(request:Request){
   const s=session(request);if(!s)return Response.json({message:'غير مصرح'},{status:403});
   try{const u=new URL(request.url);const action=u.searchParams.get('action')||'summary';
     if(action==='summary')return Response.json(await businessSummary(),{headers:{'Cache-Control':'no-store'}});
+    if(action==='companies')return Response.json({companies:await listCompanies360()},{headers:{'Cache-Control':'no-store'}});
     if(action==='invoices')return Response.json({invoices:await listInvoices()},{headers:{'Cache-Control':'no-store'}});
     if(action==='invoice'){const id=Number(u.searchParams.get('id'));return Response.json({invoice:await getInvoice(id)},{headers:{'Cache-Control':'no-store'}})}
     if(action==='customers')return Response.json({customers:await customers360(u.searchParams.get('q')||'')},{headers:{'Cache-Control':'no-store'}});
