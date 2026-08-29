@@ -70,6 +70,10 @@ export async function ensureCaptainTable() {
       ON CONFLICT (username) DO NOTHING
     `;
   }
+
+  // Keep the directory key clean so spelling/spacing does not split one company into multiple groups.
+  await db`UPDATE captain_accounts SET company=REGEXP_REPLACE(TRIM(company), '\\s+', ' ', 'g') WHERE company<>REGEXP_REPLACE(TRIM(company), '\\s+', ' ', 'g')`;
+  await db`UPDATE captain_accounts SET company='تكسي خاص', updated_at=NOW() WHERE company IN ('تاكسي خاص','تكسي خاص') AND company<>'تكسي خاص'`;
 }
 
 export async function findCaptainByUsername(username: string) {
@@ -90,7 +94,7 @@ export async function listCaptains() {
   const rows = await db`
     SELECT id, username, name, company, phone, active, created_at
     FROM captain_accounts
-    ORDER BY created_at DESC
+    ORDER BY company, active DESC, name
   `;
   return rows as CaptainRecord[];
 }
