@@ -1,21 +1,22 @@
 import { adminSessionFromRequest } from "@/lib/admin-auth";
-import { createApproval, createDailyClose, decideApproval, endShift, listAdminDbSessions, listApprovals, listDailyCloses, listShifts, markApprovalExecuted, operationalAlerts, revokeAdminDbSession, revokeUserSessions, startShift } from "@/lib/admin-security-db";
-import { saveCompany360 } from "@/lib/admin-control-db";
-import { voidInvoice } from "@/lib/business-suite-db";
+import { createApproval, createDailyClose, decideApproval, endShift, listAdminDbSessions, listApprovals, listDailyCloses, listShifts, markApprovalExecuted, revokeAdminDbSession, revokeUserSessions, startShift } from "@/lib/admin-security-db";
+import { listCompanies360, saveCompany360 } from "@/lib/admin-control-db";
+import { listInvoices, voidInvoice } from "@/lib/business-suite-db";
 
 export const runtime="nodejs";export const dynamic="force-dynamic";
 const who=(s:any)=>s?.name||s?.username||'admin';
 function auth(request:Request){return adminSessionFromRequest(request)}
+async function safeAlerts(){const [companies,invoices]=await Promise.all([listCompanies360(),listInvoices()]);const credit=(companies as any[]).map(c=>{const limit=Number(c.credit_limit_iqd||0),balance=Math.max(0,Number(c.due_iqd||0)-Number(c.paid_iqd||0));return {name:c.name,lim:limit,balance,percent:limit>0?Math.round(balance*1000/limit)/10:0}}).filter(x=>x.lim>0&&x.balance>=x.lim*.7).sort((a,b)=>b.percent-a.percent);const cutoff=new Date();cutoff.setDate(cutoff.getDate()+3);const invoicesDue=(invoices as any[]).filter(i=>['unpaid','partial'].includes(String(i.status))&&new Date(String(i.due_date))<=cutoff).map(i=>({...i,days_overdue:Math.floor((Date.now()-new Date(String(i.due_date)).getTime())/86400000)}));return {credit,invoices:invoicesDue}}
 
 export async function GET(request:Request){
   const s=auth(request);if(!s)return Response.json({message:'غير مصرح'},{status:401});
   try{const u=new URL(request.url);const action=u.searchParams.get('action')||'overview';
-    if(action==='overview')return Response.json({sessions:s.role==='owner'?await listAdminDbSessions():[],approvals:['owner','manager'].includes(s.role)?await listApprovals():[],shifts:await listShifts(),closes:['owner','manager','accountant'].includes(s.role)?await listDailyCloses():[],alerts:['owner','manager','accountant'].includes(s.role)?await operationalAlerts():{credit:[],invoices:[]},currentSessionId:s.sessionId||null,session:s},{headers:{'Cache-Control':'no-store'}});
+    if(action==='overview')return Response.json({sessions:s.role==='owner'?await listAdminDbSessions():[],approvals:['owner','manager'].includes(s.role)?await listApprovals():[],shifts:await listShifts(),closes:['owner','manager','accountant'].includes(s.role)?await listDailyCloses():[],alerts:['owner','manager','accountant'].includes(s.role)?await safeAlerts():{credit:[],invoices:[]},currentSessionId:s.sessionId||null,session:s},{headers:{'Cache-Control':'no-store'}});
     if(action==='sessions'){if(s.role!=='owner')return Response.json({message:'صلاحية المالك فقط'},{status:403});return Response.json({sessions:await listAdminDbSessions(),currentSessionId:s.sessionId||null})}
     if(action==='approvals'){if(!['owner','manager'].includes(s.role))return Response.json({message:'غير مصرح'},{status:403});return Response.json({approvals:await listApprovals()})}
     if(action==='shifts')return Response.json({shifts:await listShifts()});
     if(action==='closes'){if(!['owner','manager','accountant'].includes(s.role))return Response.json({message:'غير مصرح'},{status:403});return Response.json({closes:await listDailyCloses()})}
-    if(action==='alerts')return Response.json({alerts:await operationalAlerts()});
+    if(action==='alerts')return Response.json({alerts:await safeAlerts()});
     return Response.json({message:'إجراء غير معروف'},{status:400});
   }catch(e){console.error('security GET',e);return Response.json({message:e instanceof Error?e.message:'تعذر تحميل مركز الأمان'},{status:500})}
 }
