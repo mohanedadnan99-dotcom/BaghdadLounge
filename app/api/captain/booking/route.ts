@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { verifyCaptainSession } from "@/lib/captain-auth";
 import { saveCaptainOrder } from "@/lib/captain-orders-db";
 import { findWatchMatch, getLoungeById } from "@/lib/operations-db";
-import { maintenanceState } from "@/lib/admin-control-db";
+import { readMaintenanceState } from "@/lib/maintenance";
 import { companyCreditDecision } from "@/lib/business-suite-db";
 
 export const runtime = "nodejs";
@@ -16,7 +16,7 @@ function orderId() {const parts = new Intl.DateTimeFormat("en", {timeZone: "Asia
 
 export async function POST(request: Request) {
   try {
-    const maintenance = await maintenanceState();
+    const maintenance = await readMaintenanceState();
     if (maintenance.captain) return Response.json({ message: "بوابة الكباتن متوقفة مؤقتاً من الإدارة. يرجى المحاولة لاحقاً." }, { status: 503 });
     const body = await request.json() as {sessionToken?: string; loungeId?: string; passengers?: number; bags?: number; carts?: number; phone?: string};
     const captain = body.sessionToken ? verifyCaptainSession(body.sessionToken) : null;
