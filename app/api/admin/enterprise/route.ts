@@ -31,9 +31,21 @@ export async function POST(request:Request){
   try{
     const body=await request.json() as Record<string,unknown>;const action=String(body.action||"");
     if(action==="user"){
-      if(!roleCan(s.role,"users"))return denied();const role=String(body.role||"") as AdminRole;const username=String(body.username||"").trim();const name=String(body.name||"").trim();const password=String(body.password||"");
-      if(!["owner","manager","reception","accountant"].includes(role)||username.length<3||name.length<2||password.length<6)return Response.json({message:"بيانات الموظف غير مكتملة"},{status:400});
-      return Response.json({user:await createAdminUser({username,password,name,role})},{status:201});
+      if(!roleCan(s.role,"users"))return denied();
+      const role=String(body.role||"") as AdminRole;
+      const username=String(body.username||"").trim().toLowerCase();
+      const name=String(body.name||"").trim();
+      const password=String(body.password||"");
+      if(name.length<2)return Response.json({message:"اكتب اسم الموظف"},{status:400});
+      if(!username)return Response.json({message:"اكتب اسم المستخدم"},{status:400});
+      if(!/^[a-z0-9._-]{1,32}$/.test(username))return Response.json({message:"اسم المستخدم يكون حروف إنكليزية أو أرقام فقط، بدون مسافات"},{status:400});
+      if(password.length<6)return Response.json({message:"كلمة المرور لازم تكون 6 خانات على الأقل"},{status:400});
+      if(!["owner","manager","reception","accountant"].includes(role))return Response.json({message:"اختر صلاحية الموظف"},{status:400});
+      try{return Response.json({user:await createAdminUser({username,password,name,role})},{status:201})}
+      catch(error){
+        if(error instanceof Error&&/unique|duplicate/i.test(error.message))return Response.json({message:"اسم المستخدم مستخدم مسبقاً، اختار اسم ثاني"},{status:409});
+        throw error;
+      }
     }
     if(action==="run-rules"){if(!roleCan(s.role,"settings"))return denied();return Response.json(await runAutomationRules())}
     return Response.json({message:"الإجراء غير معروف"},{status:400});
@@ -47,7 +59,11 @@ export async function PATCH(request:Request){
     if(action==="user"){
       if(!roleCan(s.role,"users"))return denied();const id=Number(body.id);if(!Number.isFinite(id))return Response.json({message:"المعرف غير صحيح"},{status:400});
       const role=body.role?String(body.role) as AdminRole:undefined;if(role&&!["owner","manager","reception","accountant"].includes(role))return Response.json({message:"الصلاحية غير صحيحة"},{status:400});
-      return Response.json({user:await updateAdminUser({id,name:body.name!==undefined?String(body.name):undefined,username:body.username!==undefined?String(body.username):undefined,role,active:body.active!==undefined?Boolean(body.active):undefined,password:body.password?String(body.password):undefined})});
+      const username=body.username!==undefined?String(body.username).trim().toLowerCase():undefined;
+      if(username!==undefined&&!/^[a-z0-9._-]{1,32}$/.test(username))return Response.json({message:"اسم المستخدم غير صحيح"},{status:400});
+      const password=body.password?String(body.password):undefined;
+      if(password&&password.length<6)return Response.json({message:"كلمة المرور لازم تكون 6 خانات على الأقل"},{status:400});
+      return Response.json({user:await updateAdminUser({id,name:body.name!==undefined?String(body.name):undefined,username,role,active:body.active!==undefined?Boolean(body.active):undefined,password})});
     }
     if(action==="rule"){
       if(!roleCan(s.role,"settings"))return denied();const id=Number(body.id);const thresholdValue=Math.max(1,Math.round(Number(body.thresholdValue)||1));return Response.json({rule:await updateAutomationRule({id,thresholdValue,active:Boolean(body.active)})});
