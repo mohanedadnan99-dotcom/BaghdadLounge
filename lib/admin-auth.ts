@@ -53,8 +53,8 @@ export function roleCan(role:AdminRole,permission:"orders"|"operations"|"captain
   if(role==="owner")return true;
   const matrix:Record<Exclude<AdminRole,"owner">,Set<string>>={
     manager:new Set(["orders","operations","captains","promos","finance"]),
-    reception:new Set(["orders","operations"]),
-    accountant:new Set(["finance","orders"]),
+    reception:new Set(["orders"]),
+    accountant:new Set(["finance"]),
   };
   return matrix[role].has(permission);
 }
