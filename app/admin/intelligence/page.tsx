@@ -11,10 +11,10 @@ function Trend({value}:{value:number}){const up=value>=0;return <span className=
 
 export default function IntelligencePage(){
  const [data,setData]=useState<Data|null>(null),[loading,setLoading]=useState(true),[err,setErr]=useState(''),[rev,setRev]=useState(''),[pax,setPax]=useState('');
- const token=typeof window!=='undefined'?localStorage.getItem('mainAdminToken')||'':'';
- async function load(){setLoading(true);setErr('');try{const r=await fetch('/api/admin/intelligence',{headers:{Authorization:`Bearer ${token}`},cache:'no-store'});const j=await r.json();if(!r.ok)throw new Error(j.message||'تعذر التحميل');setData(j);setRev(String(j.targets?.revenueIqd||''));setPax(String(j.targets?.passengers||''))}catch(e:any){setErr(e.message||'تعذر التحميل')}finally{setLoading(false)}}
- useEffect(()=>{load()},[]);
- async function save(key:string,value:string){const r=await fetch('/api/admin/intelligence',{method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify({key,value:Number(value||0)})});const j=await r.json();if(!r.ok){alert(j.message||'تعذر الحفظ');return}await load()}
+ function getToken(){return typeof window!=='undefined'?(sessionStorage.getItem('mainAdminToken')||''):''}
+ async function load(){const token=getToken();if(!token){location.replace('/admin');return}setLoading(true);setErr('');try{const r=await fetch('/api/admin/intelligence',{headers:{Authorization:`Bearer ${token}`},cache:'no-store'});const j=await r.json();if(r.status===401||r.status===403){sessionStorage.removeItem('mainAdminToken');location.replace('/admin');return}if(!r.ok)throw new Error(j.message||'تعذر التحميل');setData(j);setRev(String(j.targets?.revenueIqd||''));setPax(String(j.targets?.passengers||''))}catch(e:any){setErr(e.message||'تعذر التحميل')}finally{setLoading(false)}}
+ useEffect(()=>{void load()},[]);
+ async function save(key:string,value:string){const token=getToken();if(!token){location.replace('/admin');return}const r=await fetch('/api/admin/intelligence',{method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify({key,value:Number(value||0)})});const j=await r.json();if(r.status===401||r.status===403&&j.message==='غير مصرح'){sessionStorage.removeItem('mainAdminToken');location.replace('/admin');return}if(!r.ok){alert(j.message||'تعذر الحفظ');return}await load()}
  const topCompany=useMemo(()=>data?.companies?.[0], [data]);const topLounge=useMemo(()=>data?.lounges?.[0],[data]);
  return <main dir="rtl" className="min-h-screen bg-[#f3f0e9] text-[#142431]">
    <div className="mx-auto max-w-[1500px] px-4 py-6 md:px-7">
