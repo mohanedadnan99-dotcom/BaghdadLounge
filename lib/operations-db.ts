@@ -40,6 +40,12 @@ export async function ensureOperationsTables(){
     await db`CREATE TABLE IF NOT EXISTS company_payments(
       id BIGSERIAL PRIMARY KEY,company_name TEXT NOT NULL,amount_iqd BIGINT NOT NULL CHECK(amount_iqd>0),note TEXT NOT NULL DEFAULT '',created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )`;
+    await Promise.all([
+      db`CREATE INDEX IF NOT EXISTS captain_orders_company_created_idx ON captain_lounge_orders(captain_company,created_at DESC)`,
+      db`CREATE INDEX IF NOT EXISTS captain_orders_status_created_idx ON captain_lounge_orders(status,created_at DESC)`,
+      db`CREATE INDEX IF NOT EXISTS lounge_bookings_status_created_idx ON lounge_bookings(status,created_at DESC)`,
+      db`CREATE INDEX IF NOT EXISTS company_payments_company_created_idx ON company_payments(company_name,created_at DESC)`
+    ]);
   })();
   try{await operationsInit}catch(error){operationsInit=null;throw error}
 }
