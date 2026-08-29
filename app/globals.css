@@ -9,6 +9,20 @@ button,input,select,textarea { font:inherit; }
 button { cursor:pointer; }
 ::selection { background:var(--champagne); color:var(--navy); }
 
+/* Enterprise admin shared controls */
+.icon { display:grid; width:40px; height:40px; place-items:center; flex:0 0 auto; border:1px solid #e2e8f0; border-radius:12px; background:#fff; color:#64748b; transition:.18s ease; }
+.icon:hover { border-color:#b7ced8; background:#f6fafb; color:#245f76; transform:translateY(-1px); }
+.btn,.btn-primary,.quick { display:inline-flex; align-items:center; justify-content:center; gap:8px; border-radius:12px; font-size:12px; font-weight:700; transition:.18s ease; }
+.btn { min-height:40px; padding:0 14px; border:1px solid #dfe6ea; background:#fff; color:#49606d; }
+.btn:hover { border-color:#b7ced8; background:#f7fafb; color:#153f57; }
+.btn-primary { min-height:42px; padding:0 16px; border:1px solid #10394e; background:#10394e; color:#fff; box-shadow:0 8px 18px rgba(16,57,78,.12); }
+.btn-primary:hover { background:#0c3042; transform:translateY(-1px); box-shadow:0 10px 22px rgba(16,57,78,.18); }
+.quick { min-height:48px; padding:10px 13px; border:1px solid #e2e8f0; background:#fff; color:#4b6070; }
+.quick:hover { border-color:#b7ced8; background:#f7fafb; color:#153f57; }
+.good,.muted { display:inline-flex; align-items:center; justify-content:center; border-radius:999px; padding:5px 10px; font-size:10px; font-weight:700; white-space:nowrap; }
+.good { background:#ecfdf5; color:#047857; }
+.muted { background:#f1f5f9; color:#64748b; }
+
 .lounge-logo { display:flex; align-items:center; gap:12px; color:#fff; direction:ltr; }
 .logo-mark { display:flex; width:46px; height:46px; align-items:center; justify-content:center; border:1px solid rgba(210,187,139,.8); font:600 14px/1 var(--font-latin),sans-serif; }
 .logo-mark i { width:1px; height:25px; margin:0 6px; background:#d2bb8b; transform:rotate(18deg); }
@@ -93,6 +107,7 @@ button { cursor:pointer; }
   .lounge-header { height:82px; padding:0 20px; }
   .header-airport,.header-cta { display:none; }
   .hero-content { position:absolute; right:20px; bottom:82px; left:20px; width:auto; margin:0!important; padding:0; }
+  [dir="ltr"] .hero-content { right:20px; left:20px; }
   .hero-content h1 { font-size:clamp(3.1rem,12vw,5rem); }
   .hero-content>p { font-size:12px; line-height:1.9; }
   .hero-proof { display:none; }
