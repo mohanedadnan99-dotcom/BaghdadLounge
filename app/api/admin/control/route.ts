@@ -1,30 +1,29 @@
 import { adminSessionFromRequest, roleCan } from "@/lib/admin-auth";
-import { captain360, company360, createTask, executiveDashboard, globalSearch, listCaptains360, listCompanies360, listTasks, maintenanceState, morningBrief, saveCompany360, setSetting, updateTask } from "@/lib/admin-control-db";
+import { captain360, company360, createTask, globalSearch, listCaptains360, listCompanies360, listTasks, maintenanceState, morningBrief, saveCompany360, setSetting, updateTask } from "@/lib/admin-control-db";
+import { executiveDashboardFast } from "@/lib/admin-control-dashboard-fast";
 import { createApproval } from "@/lib/admin-security-db";
 
 export const runtime="nodejs";export const dynamic="force-dynamic";
 function auth(request:Request){const s=adminSessionFromRequest(request);if(!s)return {response:Response.json({message:"غير مصرح"},{status:401}),session:null};if(!["owner","manager"].includes(s.role))return {response:Response.json({message:"هذه الصفحة مخصصة للإدارة"},{status:403}),session:s};return {response:null,session:s}}
 
-type CacheEntry={at:number;value:any};
+type CacheEntry={at:number;value:Promise<any>};
 const cache=new Map<string,CacheEntry>();
 const TTL=5000;
-function cached(key:string){const c=cache.get(key);return c&&Date.now()-c.at<TTL?c.value:null}
-function put(key:string,value:any){cache.set(key,{at:Date.now(),value});return value}
+async function cachedRun(key:string,fn:()=>Promise<any>){const c=cache.get(key);if(c&&Date.now()-c.at<TTL)return c.value;const value=fn();cache.set(key,{at:Date.now(),value});try{return await value}catch(e){cache.delete(key);throw e}}
 function clearCache(){cache.clear()}
 
 export async function GET(request:Request){const a=auth(request);if(a.response)return a.response;try{const u=new URL(request.url);const action=u.searchParams.get("action")||"dashboard";
   if(action==="dashboard"){
-    const hit=cached("dashboard");if(hit)return Response.json(hit,{headers:{"Cache-Control":"private, max-age=3"}});
-    const [dashboard,brief,maintenance,tasks]=await Promise.all([executiveDashboard(),morningBrief(),maintenanceState(),listTasks()]);
-    const value=put("dashboard",{dashboard,brief,maintenance,tasks});return Response.json(value,{headers:{"Cache-Control":"private, max-age=3"}})
+    const value=await cachedRun("dashboard",async()=>{const [dashboard,brief,maintenance,tasks]=await Promise.all([executiveDashboardFast(),morningBrief(),maintenanceState(),listTasks()]);return {dashboard,brief,maintenance,tasks}});
+    return Response.json(value,{headers:{"Cache-Control":"private, max-age=3"}})
   }
-  if(action==="companies"){const hit=cached("companies");if(hit)return Response.json(hit);const value=put("companies",{companies:await listCompanies360()});return Response.json(value)}
+  if(action==="companies")return Response.json(await cachedRun("companies",async()=>({companies:await listCompanies360()})));
   if(action==="company")return Response.json({company:await company360(String(u.searchParams.get("name")||""))});
-  if(action==="captains"){const hit=cached("captains");if(hit)return Response.json(hit);const value=put("captains",{captains:await listCaptains360()});return Response.json(value)}
+  if(action==="captains")return Response.json(await cachedRun("captains",async()=>({captains:await listCaptains360()})));
   if(action==="captain")return Response.json({captain:await captain360(Number(u.searchParams.get("id")||0))});
   if(action==="search")return Response.json({results:await globalSearch(String(u.searchParams.get("q")||""))});
   if(action==="tasks")return Response.json({tasks:await listTasks()});return Response.json({message:"إجراء غير معروف"},{status:400})
-}catch(error){console.error("Control GET",error);return Response.json({message:"تعذر تحميل مركز الإدارة"},{status:500})}}
+}catch(error){console.error("Control GET",error);return Response.json({message:error instanceof Error?error.message:"تعذر تحميل مركز الإدارة"},{status:500})}}
 
 export async function POST(request:Request){const a=auth(request);if(a.response)return a.response;try{const b=await request.json() as Record<string,unknown>;const action=String(b.action||"");const actor=a.session?.name||a.session?.username||"admin";if(action==="task"){const title=String(b.title||"").trim();if(title.length<2)return Response.json({message:"اكتب عنوان المهمة"},{status:400});const task=await createTask({title,details:String(b.details||""),entityType:String(b.entityType||"general"),entityKey:String(b.entityKey||""),priority:String(b.priority||"normal"),dueAt:b.dueAt?String(b.dueAt):null,actor});clearCache();return Response.json({task},{status:201})}return Response.json({message:"إجراء غير معروف"},{status:400})}catch(error){console.error("Control POST",error);return Response.json({message:"تعذر تنفيذ الإجراء"},{status:500})}}
 
