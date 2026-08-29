@@ -6,12 +6,23 @@ import { listInvoices, voidInvoice } from "@/lib/business-suite-db";
 export const runtime="nodejs";export const dynamic="force-dynamic";
 const who=(s:any)=>s?.name||s?.username||'admin';
 function auth(request:Request){return adminSessionFromRequest(request)}
-async function safeAlerts(){const [companies,invoices]=await Promise.all([listCompanies360(),listInvoices()]);const credit=(companies as any[]).map(c=>{const limit=Number(c.credit_limit_iqd||0),balance=Math.max(0,Number(c.due_iqd||0)-Number(c.paid_iqd||0));return {name:c.name,lim:limit,balance,percent:limit>0?Math.round(balance*1000/limit)/10:0}}).filter(x=>x.lim>0&&x.balance>=x.lim*.7).sort((a,b)=>b.percent-a.percent);const cutoff=new Date();cutoff.setDate(cutoff.getDate()+3);const invoicesDue=(invoices as any[]).filter(i=>['unpaid','partial'].includes(String(i.status))&&new Date(String(i.due_date))<=cutoff).map(i=>({...i,days_overdue:Math.floor((Date.now()-new Date(String(i.due_date)).getTime())/86400000)}));return {credit,invoices:invoicesDue}}
+let alertsCache:{at:number;value:any}|null=null;
+async function safeAlerts(){if(alertsCache&&Date.now()-alertsCache.at<10000)return alertsCache.value;const [companies,invoices]=await Promise.all([listCompanies360(),listInvoices()]);const credit=(companies as any[]).map(c=>{const limit=Number(c.credit_limit_iqd||0),balance=Math.max(0,Number(c.due_iqd||0)-Number(c.paid_iqd||0));return {name:c.name,lim:limit,balance,percent:limit>0?Math.round(balance*1000/limit)/10:0}}).filter(x=>x.lim>0&&x.balance>=x.lim*.7).sort((a,b)=>b.percent-a.percent);const cutoff=new Date();cutoff.setDate(cutoff.getDate()+3);const invoicesDue=(invoices as any[]).filter(i=>['unpaid','partial'].includes(String(i.status))&&new Date(String(i.due_date))<=cutoff).map(i=>({...i,days_overdue:Math.floor((Date.now()-new Date(String(i.due_date)).getTime())/86400000)}));const value={credit,invoices:invoicesDue};alertsCache={at:Date.now(),value};return value}
+function bustAlerts(){alertsCache=null}
 
 export async function GET(request:Request){
   const s=auth(request);if(!s)return Response.json({message:'غير مصرح'},{status:401});
   try{const u=new URL(request.url);const action=u.searchParams.get('action')||'overview';
-    if(action==='overview')return Response.json({sessions:s.role==='owner'?await listAdminDbSessions():[],approvals:['owner','manager'].includes(s.role)?await listApprovals():[],shifts:await listShifts(),closes:['owner','manager','accountant'].includes(s.role)?await listDailyCloses():[],alerts:['owner','manager','accountant'].includes(s.role)?await safeAlerts():{credit:[],invoices:[]},currentSessionId:s.sessionId||null,session:s},{headers:{'Cache-Control':'no-store'}});
+    if(action==='overview'){
+      const [sessions,approvals,shifts,closes,alerts]=await Promise.all([
+        s.role==='owner'?listAdminDbSessions():Promise.resolve([]),
+        ['owner','manager'].includes(s.role)?listApprovals():Promise.resolve([]),
+        listShifts(),
+        ['owner','manager','accountant'].includes(s.role)?listDailyCloses():Promise.resolve([]),
+        ['owner','manager','accountant'].includes(s.role)?safeAlerts():Promise.resolve({credit:[],invoices:[]})
+      ]);
+      return Response.json({sessions,approvals,shifts,closes,alerts,currentSessionId:s.sessionId||null,session:s},{headers:{'Cache-Control':'private, max-age=3'}})
+    }
     if(action==='sessions'){if(s.role!=='owner')return Response.json({message:'صلاحية المالك فقط'},{status:403});return Response.json({sessions:await listAdminDbSessions(),currentSessionId:s.sessionId||null})}
     if(action==='approvals'){if(!['owner','manager'].includes(s.role))return Response.json({message:'غير مصرح'},{status:403});return Response.json({approvals:await listApprovals()})}
     if(action==='shifts')return Response.json({shifts:await listShifts()});
@@ -43,12 +54,12 @@ export async function PATCH(request:Request){
       const approval:any=await decideApproval(id,decision,who(s),String(b.note||''));if(!approval)return Response.json({message:'الطلب غير موجود أو تمت معالجته'},{status:404});
       if(decision==='approved'){
         if(approval.kind==='company_change'){
-          const p=approval.payload||{};await saveCompany360({companyName:String(p.companyName||approval.entity_key),status:String(p.status||'normal'),creditLimitIqd:Number(p.creditLimitIqd||0),billingCycle:String(p.billingCycle||'monthly'),contactName:String(p.contactName||''),contactPhone:String(p.contactPhone||''),tags:String(p.tags||''),notes:String(p.notes||''),pricePerPassenger:Number(p.pricePerPassenger||0),actor:who(s)});
-        }else if(approval.kind==='void_invoice'){await voidInvoice(Number((approval.payload||{}).invoiceId||approval.entity_key))}
+          const p=approval.payload||{};await saveCompany360({companyName:String(p.companyName||approval.entity_key),status:String(p.status||'normal'),creditLimitIqd:Number(p.creditLimitIqd||0),billingCycle:String(p.billingCycle||'monthly'),contactName:String(p.contactName||''),contactPhone:String(p.contactPhone||''),tags:String(p.tags||''),notes:String(p.notes||''),pricePerPassenger:Number(p.pricePerPassenger||0),actor:who(s)});bustAlerts();
+        }else if(approval.kind==='void_invoice'){await voidInvoice(Number((approval.payload||{}).invoiceId||approval.entity_key));bustAlerts()}
         await markApprovalExecuted(id);
       }
       return Response.json({approval});
     }
-    return Response.json({message:'إجراء غير معروف'},{status:400});
+    return Response.json({message:'إجراء غير معروف'},{status:400})
   }catch(e){console.error('security PATCH',e);return Response.json({message:e instanceof Error?e.message:'تعذر تنفيذ الإجراء'},{status:500})}
 }
