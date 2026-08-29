@@ -29,15 +29,16 @@ export async function GET(request:Request){
 export async function PATCH(request:Request){
   if(!auth(request))return Response.json({message:"غير مصرح"},{status:401});
   try{
-    const body=await request.json() as PatchInput|{items?:PatchInput[]};
-    if("items" in body){
-      const items=Array.isArray(body.items)?body.items:[];
+    const raw=await request.json() as Record<string,unknown>;
+    if(Array.isArray(raw.items)){
+      const items=raw.items as PatchInput[];
       if(!items.length||items.length>100)return Response.json({message:"اختر من 1 إلى 100 طلب للعملية الجماعية"},{status:400});
       for(const item of items){const error=validate(item);if(error)return Response.json({message:error},{status:400})}
       const results=await Promise.all(items.map(apply));
       const updated=results.filter(Boolean).length;
       return Response.json({ok:true,updated,requested:items.length});
     }
+    const body=raw as PatchInput;
     const error=validate(body);if(error)return Response.json({message:error},{status:400});
     const booking=await apply(body);
     if(!booking)return Response.json({message:"الطلب غير موجود"},{status:404});
