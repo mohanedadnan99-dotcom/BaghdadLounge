@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { useState } from "react";
-import { BookingExperience } from "@/components/booking-experience";
+import { BookingExperienceLive } from "@/components/booking-experience-live";
 import { ArrowDown, CarFront, Check, Clock3, PlaneTakeoff, ShieldCheck } from "lucide-react";
 
 type Lang = "ar" | "en";
@@ -84,7 +84,7 @@ export default function Home() {
         <span>LOUNGE BAGHDAD · BGW</span><h2>{t.sectionTitle}</h2><p>{t.sectionText}</p>
       </section>
 
-      <BookingExperience lang={lang} />
+      <BookingExperienceLive lang={lang} />
 
       <footer className="lounge-footer">
         <div className="footer-main"><LoungeLogo dark /><p>{t.footerLine}</p></div>
