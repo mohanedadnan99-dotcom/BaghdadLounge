@@ -1,9 +1,14 @@
 "use client";
 
 import Image from "next/image";
+import dynamic from "next/dynamic";
 import { useState } from "react";
-import { BookingExperienceLive } from "@/components/booking-experience-live";
 import { ArrowDown, CarFront, Check, Clock3, PlaneTakeoff, ShieldCheck } from "lucide-react";
+
+const BookingExperienceLive=dynamic(()=>import("@/components/booking-experience-live").then(m=>m.BookingExperienceLive),{
+  ssr:false,
+  loading:()=> <section id="booking" className="mx-auto min-h-[420px] max-w-5xl px-4 py-16"><div className="animate-pulse rounded-[28px] border border-black/5 bg-white p-8 shadow-sm"><div className="h-5 w-32 rounded bg-black/10"/><div className="mt-5 h-11 rounded-xl bg-black/5"/><div className="mt-3 h-11 rounded-xl bg-black/5"/><div className="mt-3 h-24 rounded-xl bg-black/5"/></div></section>
+});
 
 type Lang = "ar" | "en";
 
@@ -43,7 +48,7 @@ export default function Home() {
   return (
     <main lang={lang} dir={rtl ? "rtl" : "ltr"} className={rtl ? "font-[var(--font-arabic)]" : "font-[var(--font-latin)]"}>
       <section className="lounge-hero" id="top">
-        <Image src="/lounge-hero-v2.jpg" alt={rtl ? "صالة مطار فاخرة تطل على مدرج الطائرات" : "Premium airport lounge overlooking the runway"} fill priority sizes="100vw" className="hero-photo" />
+        <Image src="/lounge-hero-v2.jpg" alt={rtl ? "صالة مطار فاخرة تطل على مدرج الطائرات" : "Premium airport lounge overlooking the runway"} fill priority fetchPriority="high" quality={78} sizes="100vw" className="hero-photo" />
         <div className="hero-overlay" />
 
         <header className="lounge-header">
