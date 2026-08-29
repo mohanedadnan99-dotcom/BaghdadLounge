@@ -17,6 +17,7 @@ function validate(input:PatchInput){
   if(input.internalNote!==undefined&&String(input.internalNote).length>2000)return "الملاحظة طويلة جداً";
   return null;
 }
+function receptionOnlyStatus(input:PatchInput){return input.status!==undefined&&input.priority===undefined&&input.internalNote===undefined&&input.archived===undefined}
 async function apply(input:PatchInput){return updateAdminBooking({id:Number(input.id),status:input.status,priority:input.priority,internalNote:input.internalNote,archived:input.archived})}
 
 export async function GET(request:Request){
@@ -24,17 +25,19 @@ export async function GET(request:Request){
   try{return Response.json({bookings:await listAdminBookings()},{headers:{"Cache-Control":"no-store"}})}catch(error){console.error(error);return Response.json({message:"تعذر تحميل الطلبات"},{status:500})}
 }
 export async function PATCH(request:Request){
-  if(!auth(request))return Response.json({message:"غير مصرح لتعديل الطلبات"},{status:403});
+  const session=auth(request);if(!session)return Response.json({message:"غير مصرح لتعديل الطلبات"},{status:403});
   try{
     const raw=await request.json() as Record<string,unknown>;
     if(Array.isArray(raw.items)){
       const items=raw.items as PatchInput[];
       if(!items.length||items.length>100)return Response.json({message:"اختر من 1 إلى 100 طلب للعملية الجماعية"},{status:400});
+      if(session.role==='reception')return Response.json({message:"واجهة الاستقبال لا تدعم التعديل الجماعي"},{status:403});
       for(const item of items){const error=validate(item);if(error)return Response.json({message:error},{status:400})}
       const results=await Promise.all(items.map(apply));
       return Response.json({ok:true,updated:results.filter(Boolean).length,requested:items.length});
     }
     const body=raw as PatchInput;const error=validate(body);if(error)return Response.json({message:error},{status:400});
+    if(session.role==='reception'&&!receptionOnlyStatus(body))return Response.json({message:"صلاحية الاستقبال تقتصر على تغيير حالة الطلب"},{status:403});
     const booking=await apply(body);if(!booking)return Response.json({message:"الطلب غير موجود"},{status:404});return Response.json({booking});
   }catch(error){console.error(error);return Response.json({message:"تعذر تحديث الطلب"},{status:500})}
 }
