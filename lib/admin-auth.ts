@@ -4,6 +4,7 @@ import type { AdminRole } from "./admin-users-db";
 const ADMIN_USERNAME = "admin";
 const ADMIN_SALT = "baghdad-lounge-admin-v1";
 const ADMIN_PASSWORD_HASH = "f5e801be047d934f108e5c26ed8c414a7fc90d000101a744604fbe55991fd3a9d304aaa8ae7bf7a3f0c84c4c3dbd4adfa14aaf1684f6800515a4b7b22e58f69e";
+export const ADMIN_SESSION_COOKIE="baghdad_admin_session";
 
 export type AdminSession={role:AdminRole;exp:number;userId?:number;name?:string;username?:string;legacy?:boolean;sessionId?:string};
 
@@ -44,11 +45,22 @@ export function readAdminSession(token:string):AdminSession|null{
 }
 
 export function verifyAdminSession(token: string) { return Boolean(readAdminSession(token)); }
+function cookieToken(request:Request){
+  const cookie=request.headers.get("cookie")||"";
+  for(const part of cookie.split(";")){
+    const [k,...rest]=part.trim().split("=");
+    if(k===ADMIN_SESSION_COOKIE)return decodeURIComponent(rest.join("="));
+  }
+  return "";
+}
 export function adminTokenFromRequest(request: Request) {
   const value = request.headers.get("authorization") || "";
-  return value.startsWith("Bearer ") ? value.slice(7) : "";
+  if(value.startsWith("Bearer ")&&value.slice(7).trim())return value.slice(7).trim();
+  return cookieToken(request);
 }
 export function adminSessionFromRequest(request:Request){return readAdminSession(adminTokenFromRequest(request))}
+export function adminSessionCookie(token:string){return `${ADMIN_SESSION_COOKIE}=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Secure; Max-Age=${8*60*60}`}
+export function clearAdminSessionCookie(){return `${ADMIN_SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Secure; Max-Age=0`}
 export function roleCan(role:AdminRole,permission:"orders"|"operations"|"captains"|"promos"|"finance"|"users"|"settings"){
   if(role==="owner")return true;
   const matrix:Record<Exclude<AdminRole,"owner">,Set<string>>={
