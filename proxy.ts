@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ADMIN_SESSION_COOKIE, adminTokenFromRequest, readAdminSession } from "@/lib/admin-auth";
-import { isAdminDbSessionActive } from "@/lib/admin-security-db";
+import { isAdminSessionActiveFast } from "@/lib/admin-session-fast";
 
 export async function proxy(request:NextRequest){
   const path=request.nextUrl.pathname;
@@ -9,7 +9,7 @@ export async function proxy(request:NextRequest){
   if(!token)return NextResponse.json({message:"غير مصرح"},{status:401});
   const session=readAdminSession(token);
   if(!session?.sessionId)return NextResponse.json({message:"انتهت الجلسة، سجل دخولك مرة ثانية"},{status:401});
-  const active=await isAdminDbSessionActive(session.sessionId);
+  const active=await isAdminSessionActiveFast(session.sessionId);
   if(!active)return NextResponse.json({message:"تم إنهاء هذه الجلسة"},{status:401});
   const response=NextResponse.next();
   if(!request.cookies.get(ADMIN_SESSION_COOKIE)?.value){
