@@ -41,7 +41,7 @@ export async function intelligenceSummary(){
       COALESCE(SUM(passengers) FILTER(WHERE created_at>=b.p0 AND created_at<b.m0 AND status<>'cancelled'),0)::int prev_passengers,
       COALESCE(SUM(revenue) FILTER(WHERE created_at>=b.p0 AND created_at<b.m0 AND status<>'cancelled'),0)::bigint prev_revenue,
       COUNT(*) FILTER(WHERE created_at>=b.m0 AND status='cancelled')::int month_cancelled
-    FROM all_orders,b`,
+    FROM all_orders CROSS JOIN bounds b`,
     db`WITH c AS(
       SELECT captain_company company_name,
         COUNT(*) FILTER(WHERE created_at>=date_trunc('month',NOW()))::int orders_now,
@@ -53,7 +53,8 @@ export async function intelligenceSummary(){
     ) SELECT c.*,COALESCE(a.price_per_passenger,0)::int price_per_passenger,(c.pax_now*COALESCE(a.price_per_passenger,0))::bigint estimated_revenue FROM c LEFT JOIN company_accounts a ON a.company_name=c.company_name ORDER BY pax_now DESC,orders_now DESC LIMIT 100`,
     db`WITH x AS(
       SELECT lounge_name,created_at,status,passengers FROM captain_lounge_orders
-      UNION ALL SELECT lounge_name,created_at,status,passengers FROM lounge_bookings WHERE lounge_name IS NOT NULL
+      UNION ALL
+      SELECT 'لاونج بغداد'::text AS lounge_name,created_at,status,passengers FROM lounge_bookings
     ) SELECT lounge_name,
       COUNT(*) FILTER(WHERE created_at>=date_trunc('month',NOW()))::int orders_now,
       COALESCE(SUM(passengers) FILTER(WHERE created_at>=date_trunc('month',NOW()) AND status<>'cancelled'),0)::int pax_now,
