@@ -29,10 +29,17 @@ export async function POST(request: Request) {
       discountPercent: promo.discount_percent,
     } : null);
 
-    await saveBooking(reference, booking, pricing);
+    // For electronic payments, obtain a valid checkout URL before persisting the booking.
+    // This prevents a failed payment-provider call from leaving a saved booking that the customer thinks failed.
     const paymentUrl = booking.payment === "wayl" ? await createWaylPayment(reference, booking, pricing.total) : undefined;
-    await notifyTelegram(reference, booking, pricing);
-    if (promo) await recordPromoUse(promo.id);
+    await saveBooking(reference, booking, pricing);
+
+    // Once the booking is safely stored, secondary notifications must never turn a successful booking into a visible failure.
+    const secondary = await Promise.allSettled([
+      notifyTelegram(reference, booking, pricing),
+      promo ? recordPromoUse(promo.id) : Promise.resolve(),
+    ]);
+    for (const result of secondary) if (result.status === "rejected") console.error("Booking secondary action failed", reference, result.reason);
 
     return Response.json({ reference, paymentUrl, pricing }, { status: 201 });
   } catch (error) {
