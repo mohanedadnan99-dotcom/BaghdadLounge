@@ -1,23 +1,45 @@
 import { adminTokenFromRequest, verifyAdminSession } from "@/lib/admin-auth";
 import { listAdminBookings, updateAdminBooking } from "@/lib/admin-dashboard-db";
-export const runtime="nodejs"; export const dynamic="force-dynamic";
+
+export const runtime="nodejs";
+export const dynamic="force-dynamic";
+
 const allowedStatus=new Set(["new","received","in_progress","completed","cancelled"]);
 const allowedPriority=new Set(["normal","important","urgent"]);
 function auth(request:Request){return verifyAdminSession(adminTokenFromRequest(request))}
+
+type PatchInput={id?:number;status?:string;priority?:"normal"|"important"|"urgent";internalNote?:string;archived?:boolean};
+function validate(input:PatchInput){
+  const id=Number(input.id);
+  if(!Number.isFinite(id))return "معرف الطلب غير صحيح";
+  if(input.status!==undefined&&!allowedStatus.has(input.status))return "حالة الطلب غير صحيحة";
+  if(input.priority!==undefined&&!allowedPriority.has(input.priority))return "أولوية الطلب غير صحيحة";
+  if(input.internalNote!==undefined&&String(input.internalNote).length>2000)return "الملاحظة طويلة جداً";
+  return null;
+}
+async function apply(input:PatchInput){
+  return updateAdminBooking({id:Number(input.id),status:input.status,priority:input.priority,internalNote:input.internalNote,archived:input.archived});
+}
+
 export async function GET(request:Request){
-  if(!auth(request)) return Response.json({message:"غير مصرح"},{status:401});
+  if(!auth(request))return Response.json({message:"غير مصرح"},{status:401});
   try{return Response.json({bookings:await listAdminBookings()},{headers:{"Cache-Control":"no-store"}})}catch(error){console.error(error);return Response.json({message:"تعذر تحميل الطلبات"},{status:500})}
 }
+
 export async function PATCH(request:Request){
-  if(!auth(request)) return Response.json({message:"غير مصرح"},{status:401});
+  if(!auth(request))return Response.json({message:"غير مصرح"},{status:401});
   try{
-    const body=await request.json() as {id?:number;status?:string;priority?:"normal"|"important"|"urgent";internalNote?:string;archived?:boolean};
-    const id=Number(body.id);
-    if(!Number.isFinite(id)) return Response.json({message:"معرف الطلب غير صحيح"},{status:400});
-    if(body.status!==undefined&&!allowedStatus.has(body.status)) return Response.json({message:"حالة الطلب غير صحيحة"},{status:400});
-    if(body.priority!==undefined&&!allowedPriority.has(body.priority)) return Response.json({message:"أولوية الطلب غير صحيحة"},{status:400});
-    if(body.internalNote!==undefined&&String(body.internalNote).length>2000) return Response.json({message:"الملاحظة طويلة جداً"},{status:400});
-    const booking=await updateAdminBooking({id,status:body.status,priority:body.priority,internalNote:body.internalNote,archived:body.archived});
+    const body=await request.json() as PatchInput|{items?:PatchInput[]};
+    if("items" in body){
+      const items=Array.isArray(body.items)?body.items:[];
+      if(!items.length||items.length>100)return Response.json({message:"اختر من 1 إلى 100 طلب للعملية الجماعية"},{status:400});
+      for(const item of items){const error=validate(item);if(error)return Response.json({message:error},{status:400})}
+      const results=await Promise.all(items.map(apply));
+      const updated=results.filter(Boolean).length;
+      return Response.json({ok:true,updated,requested:items.length});
+    }
+    const error=validate(body);if(error)return Response.json({message:error},{status:400});
+    const booking=await apply(body);
     if(!booking)return Response.json({message:"الطلب غير موجود"},{status:404});
     return Response.json({booking});
   }catch(error){console.error(error);return Response.json({message:"تعذر تحديث الطلب"},{status:500})}
