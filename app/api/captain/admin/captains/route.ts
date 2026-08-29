@@ -1,5 +1,6 @@
 import { adminSessionFromRequest, roleCan } from "@/lib/admin-auth";
 import { createCaptain, deleteCaptain, listCaptains, updateCaptain } from "@/lib/captain-db";
+import { normalizeCompanyName } from "@/lib/company-name";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,7 +22,7 @@ export async function POST(request: Request) {
   if (!authorized(request)) return unauthorized();
   try {
     const body = await request.json() as { username?: string; password?: string; name?: string; company?: string; phone?: string };
-    const username = body.username?.trim().toLowerCase() || ""; const password = body.password || ""; const name = body.name?.trim() || ""; const company = body.company?.trim() || ""; const phone = body.phone?.trim() || "";
+    const username = body.username?.trim().toLowerCase() || ""; const password = body.password || ""; const name = body.name?.trim() || ""; const company = normalizeCompanyName(body.company || ""); const phone = body.phone?.trim() || "";
     if (!name || !company || !username || password.length < 6) return Response.json({ message: "أكمل الاسم والشركة واليوزر، والباسورد لازم 6 خانات على الأقل" }, { status: 400 });
     if (!validUsername(username)) return Response.json({ message: "اليوزر يكون حروف إنكليزية أو أرقام فقط ومن 2 إلى 32 خانة" }, { status: 400 });
     if (!validPhone(phone)) return Response.json({ message: "رقم الهاتف غير صحيح" }, { status: 400 });
@@ -35,7 +36,7 @@ export async function PATCH(request: Request) {
   if (!authorized(request)) return unauthorized();
   try {
     const body = await request.json() as { id?: number; username?: string; password?: string; name?: string; company?: string; phone?: string; active?: boolean };
-    const id = Number(body.id); const username = body.username?.trim().toLowerCase() || ""; const name = body.name?.trim() || ""; const company = body.company?.trim() || ""; const phone = body.phone?.trim() || ""; const password = body.password || "";
+    const id = Number(body.id); const username = body.username?.trim().toLowerCase() || ""; const name = body.name?.trim() || ""; const company = normalizeCompanyName(body.company || ""); const phone = body.phone?.trim() || ""; const password = body.password || "";
     if (!Number.isFinite(id) || !name || !company || !username) return Response.json({ message: "بيانات التعديل ناقصة" }, { status: 400 });
     if (!validUsername(username)) return Response.json({ message: "اليوزر يكون حروف إنكليزية أو أرقام فقط ومن 2 إلى 32 خانة" }, { status: 400 });
     if (!validPhone(phone)) return Response.json({ message: "رقم الهاتف غير صحيح" }, { status: 400 });
