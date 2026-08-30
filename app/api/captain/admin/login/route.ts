@@ -22,8 +22,8 @@ export async function POST(request: Request) {
     const user=await authenticateAdminUser(username,password);
     if(!user)return Response.json({ message: "بيانات الدخول غير صحيحة أو الحساب موقوف" }, { status: 401 });
     const sessionId=await createAdminDbSession({userId:user.id,username:user.username,name:user.name,role:user.role,userAgent,ip});
-    const token=createAdminSession({role:user.role,userId:user.id,name:user.name,username:user.username,sessionId});
-    return Response.json({token,user:{id:user.id,name:user.name,username:user.username,role:user.role},sessionId}, { headers: { "Cache-Control": "no-store", "Set-Cookie":adminSessionCookie(token) } });
+    const token=createAdminSession({role:user.role,permissions:user.permissions,userId:user.id,name:user.name,username:user.username,sessionId});
+    return Response.json({token,user:{id:user.id,name:user.name,username:user.username,phone:user.phone,role:user.role,permissions:user.permissions},sessionId}, { headers: { "Cache-Control": "no-store", "Set-Cookie":adminSessionCookie(token) } });
   } catch (error) {
     console.error(error);
     return Response.json({ message: "تعذر تسجيل الدخول" }, { status: 400 });
