@@ -1,6 +1,7 @@
 import { adminSessionFromRequest } from "@/lib/admin-auth";
 import { opsSessionFromRequest } from "@/lib/lounge-ops-auth";
 import { createOpsEmployee, listOpsEmployees, opsDashboard, updateOpsEmployee, type OpsRole, type OpsShiftName } from "@/lib/lounge-ops-db";
+import { getOpsEmployeeLounges, loungeDashboardStatus, OPS_LOUNGES, setOpsEmployeeLounge, type OpsLoungeName } from "@/lib/lounge-ops-lounges";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,8 +19,17 @@ export async function GET(request: Request) {
   if (!owner(request)) return Response.json({ message: "صلاحية المالك فقط" }, { status: 403 });
   try {
     const action = new URL(request.url).searchParams.get("action") || "dashboard";
-    if (action === "employees") return Response.json({ employees: await listOpsEmployees(), roles, shifts }, { headers: { "Cache-Control": "no-store" } });
-    return Response.json(await opsDashboard(), { headers: { "Cache-Control": "no-store" } });
+    if (action === "employees") {
+      const [employees, loungesById] = await Promise.all([listOpsEmployees(), getOpsEmployeeLounges()]);
+      return Response.json({
+        employees: employees.map((employee) => ({ ...employee, loungeName: loungesById.get(employee.id) || "لاونج بغداد" })),
+        roles,
+        shifts,
+        lounges: OPS_LOUNGES,
+      }, { headers: { "Cache-Control": "no-store" } });
+    }
+    const [dashboard, lounges] = await Promise.all([opsDashboard(), loungeDashboardStatus()]);
+    return Response.json({ ...dashboard, lounges }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     console.error("ops admin GET", error);
     return Response.json({ message: error instanceof Error ? error.message : "تعذر تحميل نظام التشغيل" }, { status: 500 });
@@ -35,10 +45,12 @@ export async function POST(request: Request) {
     const password = String(body.password || "");
     const role = String(body.role || "reception") as OpsRole;
     const assignedShift = String(body.assignedShift || "الصباحي") as OpsShiftName;
+    const loungeName = String(body.loungeName || "لاونج بغداد") as OpsLoungeName;
     if (!name || !username || password.length < 6) return Response.json({ message: "أدخل الاسم واليوزر وكلمة مرور من 6 أحرف على الأقل" }, { status: 400 });
-    if (!roles.includes(role) || !shifts.includes(assignedShift)) return Response.json({ message: "الصلاحية أو الشفت غير صحيح" }, { status: 400 });
+    if (!roles.includes(role) || !shifts.includes(assignedShift) || !OPS_LOUNGES.includes(loungeName)) return Response.json({ message: "الصلاحية أو الشفت أو الصالة غير صحيحة" }, { status: 400 });
     const employee = await createOpsEmployee({ name, username, password, role, assignedShift, permissions: Array.isArray(body.permissions) ? body.permissions.map(String) : [] });
-    return Response.json({ employee }, { status: 201 });
+    await setOpsEmployeeLounge(employee.id, loungeName);
+    return Response.json({ employee: { ...employee, loungeName } }, { status: 201 });
   } catch (error: any) {
     console.error("ops admin POST", error);
     const duplicate = String(error?.message || "").toLowerCase().includes("unique");
@@ -54,11 +66,14 @@ export async function PATCH(request: Request) {
     if (!Number.isInteger(id) || id <= 0) return Response.json({ message: "رقم الموظف غير صحيح" }, { status: 400 });
     const role = body.role === undefined ? undefined : String(body.role) as OpsRole;
     const assignedShift = body.assignedShift === undefined ? undefined : String(body.assignedShift) as OpsShiftName;
+    const loungeName = body.loungeName === undefined ? undefined : String(body.loungeName) as OpsLoungeName;
     if (role && !roles.includes(role)) return Response.json({ message: "الصلاحية غير صحيحة" }, { status: 400 });
     if (assignedShift && !shifts.includes(assignedShift)) return Response.json({ message: "الشفت غير صحيح" }, { status: 400 });
+    if (loungeName && !OPS_LOUNGES.includes(loungeName)) return Response.json({ message: "الصالة غير صحيحة" }, { status: 400 });
     const employee = await updateOpsEmployee({ id, active: body.active === undefined ? undefined : Boolean(body.active), role, assignedShift, permissions: body.permissions === undefined ? undefined : Array.isArray(body.permissions) ? body.permissions.map(String) : [], password: body.password ? String(body.password) : undefined });
     if (!employee) return Response.json({ message: "الموظف غير موجود" }, { status: 404 });
-    return Response.json({ employee });
+    if (loungeName) await setOpsEmployeeLounge(id, loungeName);
+    return Response.json({ employee: { ...employee, ...(loungeName ? { loungeName } : {}) } });
   } catch (error) {
     console.error("ops admin PATCH", error);
     return Response.json({ message: error instanceof Error ? error.message : "تعذر حفظ الموظف" }, { status: 400 });
