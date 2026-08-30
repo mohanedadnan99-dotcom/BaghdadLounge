@@ -37,6 +37,9 @@ export async function ensureOpsTables() {
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`;
   await db`CREATE INDEX IF NOT EXISTS ops_employees_active_idx ON ops_employees(active,assigned_shift)`;
+  await db`INSERT INTO ops_employees(name,username,password_hash,role,assigned_shift,permissions,active)
+    VALUES('مهند عدنان','mohannad','c517e444c34056116a706266f511d2e2:f2dcf5a46f2627bddc7c0707b88573dd408c9bfb72fab39c2190c7ec712bb34b5d6ce872e7939840539a496961019921f5ea1022b453c414a5d1f3aeb7b9f46','owner','الصباحي',ARRAY['dashboard','employees','shifts','scan','reports','accounting','settings'],TRUE)
+    ON CONFLICT(username) DO NOTHING`;
 
   await db`CREATE TABLE IF NOT EXISTS ops_shifts(
     id BIGSERIAL PRIMARY KEY,
