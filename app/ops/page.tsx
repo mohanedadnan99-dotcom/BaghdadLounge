@@ -1,63 +1,61 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 type User={employeeId?:number;id?:number;name:string;username:string;role:string;assignedShift:string};
 type Shift={id:number;shift_name:string;opened_at:string}|null;
-const paymentLabels=[
-  ["cash","نقدي"],["electronic","دفع إلكتروني"],["credit","آجل / حساب شركة"],["prepaid","مدفوع مسبقاً"],["voucher","Voucher / قسيمة"],["complimentary","مجاني"]
-];
+const paymentLabels=[["cash","نقدي"],["electronic","دفع إلكتروني"],["credit","آجل / حساب شركة"],["prepaid","مدفوع مسبقاً"],["voucher","Voucher / قسيمة"],["complimentary","مجاني"]];
+const scanFormats=["qr_code","pdf417","aztec","data_matrix","code_128"];
 
 export default function OpsStaffPage(){
-  const [user,setUser]=useState<User|null>(null);
-  const [shift,setShift]=useState<Shift>(null);
-  const [loading,setLoading]=useState(true);
-  const [message,setMessage]=useState("");
+  const [user,setUser]=useState<User|null>(null);const [shift,setShift]=useState<Shift>(null);const [loading,setLoading]=useState(true);const [message,setMessage]=useState("");
   const [login,setLogin]=useState({username:"",password:""});
   const [entry,setEntry]=useState({passengerName:"",airline:"",flightNumber:"",origin:"",destination:"",seat:"",paymentType:"cash",billingCompany:"",amountIqd:"",boardingRaw:"",notes:""});
+  const [cameraOn,setCameraOn]=useState(false);const [scanStatus,setScanStatus]=useState("");const [fileName,setFileName]=useState("");
+  const videoRef=useRef<HTMLVideoElement|null>(null);const streamRef=useRef<MediaStream|null>(null);const scanTimer=useRef<number|null>(null);
 
-  async function refreshSession(){
-    const res=await fetch("/api/ops/session",{cache:"no-store"});
-    if(!res.ok){setUser(null);setShift(null);setLoading(false);return}
-    const data=await res.json();setUser(data.user);setLoading(false);await refreshShift();
-  }
+  async function refreshSession(){const res=await fetch("/api/ops/session",{cache:"no-store"});if(!res.ok){setUser(null);setShift(null);setLoading(false);return}const data=await res.json();setUser(data.user);setLoading(false);await refreshShift()}
   async function refreshShift(){const res=await fetch("/api/ops/shift",{cache:"no-store"});if(res.ok){const data=await res.json();setShift(data.shift||null)}}
-  useEffect(()=>{refreshSession()},[]);
+  useEffect(()=>{refreshSession();return()=>stopCamera()},[]);
 
   async function doLogin(e:React.FormEvent){e.preventDefault();setMessage("");const res=await fetch("/api/ops/session",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(login)});const data=await res.json();if(!res.ok){setMessage(data.message||"فشل تسجيل الدخول");return}setUser(data.user);setLogin({username:"",password:""});setMessage("تم تسجيل الدخول");await refreshShift()}
-  async function logout(){await fetch("/api/ops/session",{method:"DELETE"});setUser(null);setShift(null);setMessage("")}
+  async function logout(){stopCamera();await fetch("/api/ops/session",{method:"DELETE"});setUser(null);setShift(null);setMessage("")}
   async function openShift(){setMessage("");const res=await fetch("/api/ops/shift",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});const data=await res.json();if(!res.ok){setMessage(data.message||"تعذر فتح الشفت");return}setShift(data.shift);setMessage("تم فتح الشفت")}
-  async function closeShift(){if(!confirm("تأكيد إغلاق الشفت؟"))return;const res=await fetch("/api/ops/shift",{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({note:""})});const data=await res.json();if(!res.ok){setMessage(data.message||"تعذر إغلاق الشفت");return}setShift(null);setMessage("تم إغلاق الشفت")}
-  async function submitEntry(e:React.FormEvent){e.preventDefault();setMessage("");const res=await fetch("/api/ops/entries",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...entry,amountIqd:Number(entry.amountIqd||0),entrySource:entry.boardingRaw.trim()?"scan":"manual"})});const data=await res.json();if(!res.ok){setMessage(data.message||"تعذر تسجيل المسافر");return}setMessage(`تم تسجيل المسافر — ${data.entry.reference}`);setEntry({passengerName:"",airline:"",flightNumber:"",origin:"",destination:"",seat:"",paymentType:"cash",billingCompany:"",amountIqd:"",boardingRaw:"",notes:""})}
+  async function closeShift(){if(!confirm("تأكيد إغلاق الشفت؟"))return;stopCamera();const res=await fetch("/api/ops/shift",{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({note:""})});const data=await res.json();if(!res.ok){setMessage(data.message||"تعذر إغلاق الشفت");return}setShift(null);setMessage("تم إغلاق الشفت")}
+  async function submitEntry(e:React.FormEvent){e.preventDefault();setMessage("");const res=await fetch("/api/ops/entries",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...entry,amountIqd:Number(entry.amountIqd||0),entrySource:entry.boardingRaw.trim()?"scan":"manual"})});const data=await res.json();if(!res.ok){setMessage(data.message||"تعذر تسجيل المسافر");return}setMessage(`تم تسجيل المسافر — ${data.entry.reference}`);setEntry({passengerName:"",airline:"",flightNumber:"",origin:"",destination:"",seat:"",paymentType:"cash",billingCompany:"",amountIqd:"",boardingRaw:"",notes:""});setFileName("")}
+
+  function detectorAvailable(){return typeof window!=="undefined"&&"BarcodeDetector" in window}
+  async function makeDetector(){const C=(window as any).BarcodeDetector;let formats=scanFormats;try{if(C.getSupportedFormats){const supported=await C.getSupportedFormats();formats=scanFormats.filter(x=>supported.includes(x))}}catch{}return new C(formats.length?{formats}:undefined)}
+  function acceptScan(raw:string,format=""){if(!raw.trim())return;setEntry(v=>({...v,boardingRaw:raw.trim()}));setScanStatus(`تمت القراءة${format?` — ${format}`:""}`);try{navigator.vibrate?.(100)}catch{};stopCamera()}
+
+  async function startCamera(){setScanStatus("");if(!detectorAvailable()){setScanStatus("هذا المتصفح لا يدعم قارئ الباركود المباشر. استخدم قارئ USB/Bluetooth أو ارفع صورة.");return}try{const stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:"environment"},width:{ideal:1280},height:{ideal:720}},audio:false});streamRef.current=stream;setCameraOn(true);setTimeout(async()=>{if(!videoRef.current)return;videoRef.current.srcObject=stream;await videoRef.current.play();const detector=await makeDetector();const tick=async()=>{if(!streamRef.current||!videoRef.current)return;try{const hits=await detector.detect(videoRef.current);if(hits?.[0]?.rawValue){acceptScan(String(hits[0].rawValue),String(hits[0].format||""));return}}catch{}scanTimer.current=window.setTimeout(tick,350)};tick()},50)}catch(err){console.error(err);setScanStatus("تعذر فتح الكاميرا. تأكد من سماح الكاميرا للمتصفح أو استخدم رفع صورة.")}}
+  function stopCamera(){if(scanTimer.current){window.clearTimeout(scanTimer.current);scanTimer.current=null}streamRef.current?.getTracks().forEach(t=>t.stop());streamRef.current=null;setCameraOn(false)}
+
+  async function scanImageFile(file:File){if(!detectorAvailable()){setScanStatus("تم اختيار الصورة، لكن هذا المتصفح لا يدعم القراءة التلقائية. استخدم قارئ خارجي أو أدخل البيانات يدوياً.");return}try{const bitmap=await createImageBitmap(file);const detector=await makeDetector();const hits=await detector.detect(bitmap);bitmap.close();if(hits?.[0]?.rawValue)acceptScan(String(hits[0].rawValue),String(hits[0].format||""));else setScanStatus("ما قدرت أقرأ الباركود من الصورة. جرّب صورة أوضح أو استخدم الإدخال اليدوي.")}catch{setScanStatus("تعذر تحليل الصورة. جرّب صورة ثانية أو الإدخال اليدوي.")}}
+  async function onFile(file?:File){if(!file)return;setFileName(file.name);setScanStatus("");if(file.type.startsWith("image/")){await scanImageFile(file);return}if(file.type==="application/pdf"){setScanStatus("تم إرفاق ملف PDF كخطة احتياط. القراءة المباشرة من PDF تحتاج تحويل الصفحة لصورة، وسيتم تفعيلها كخطوة تكامل لاحقة؛ حالياً استخدم صورة التذكرة أو القارئ الخارجي.");return}setScanStatus("نوع الملف غير مدعوم.")}
 
   if(loading)return <Shell><div style={card}>جاري تحميل نظام الصالة...</div></Shell>;
   if(!user)return <Shell><div style={{maxWidth:430,margin:"40px auto"}}><form onSubmit={doLogin} style={card}><div style={{color:"#c8a66a",fontWeight:900}}>BAGHDAD LOUNGE</div><h1 style={{margin:"8px 0 4px",fontSize:27}}>تسجيل دخول الموظف</h1><p style={{color:"#94a3b8",marginTop:0}}>كل موظف يدخل بيوزره الخاص قبل فتح الشفت.</p>{message&&<Notice text={message}/>}<Field label="اسم المستخدم"><input required autoCapitalize="none" style={input} value={login.username} onChange={e=>setLogin({...login,username:e.target.value})}/></Field><Field label="كلمة المرور"><input required type="password" style={input} value={login.password} onChange={e=>setLogin({...login,password:e.target.value})}/></Field><button style={{...button(true),width:"100%"}}>دخول</button></form></div></Shell>;
 
-  return <Shell><div style={{maxWidth:980,margin:"0 auto"}}>
-    <header style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,flexWrap:"wrap",marginBottom:16}}><div><div style={{color:"#c8a66a",fontWeight:900}}>BAGHDAD LOUNGE OPERATIONS</div><h1 style={{margin:"5px 0",fontSize:25}}>واجهة باب الصالة</h1><div style={{color:"#94a3b8"}}>{user.name} · {user.assignedShift}</div></div><div style={{display:"flex",gap:8,flexWrap:"wrap"}}>{user.role==="owner"||user.role==="manager"?<a href="/ops/admin" style={{...button(false),textDecoration:"none"}}>لوحة الإدارة</a>:null}<button type="button" onClick={logout} style={button(false)}>تسجيل خروج</button></div></header>
-    {message&&<Notice text={message}/>} 
-    <section style={{...card,marginBottom:16,display:"flex",justifyContent:"space-between",gap:14,alignItems:"center",flexWrap:"wrap"}}><div><div style={{fontWeight:900,fontSize:18}}>الشفت</div>{shift?<div style={{color:"#86efac",marginTop:5}}>مفتوح — {shift.shift_name} — منذ {new Date(shift.opened_at).toLocaleTimeString("ar-IQ",{hour:"2-digit",minute:"2-digit"})}</div>:<div style={{color:"#fca5a5",marginTop:5}}>لا يوجد شفت مفتوح</div>}</div>{shift?<button type="button" onClick={closeShift} style={button(false)}>إغلاق الشفت</button>:<button type="button" onClick={openShift} style={button(true)}>فتح الشفت</button>}</section>
+  return <Shell><div style={{maxWidth:980,margin:"0 auto"}}><header style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,flexWrap:"wrap",marginBottom:16}}><div><div style={{color:"#c8a66a",fontWeight:900}}>BAGHDAD LOUNGE OPERATIONS</div><h1 style={{margin:"5px 0",fontSize:25}}>واجهة باب الصالة</h1><div style={{color:"#94a3b8"}}>{user.name} · {user.assignedShift}</div></div><div style={{display:"flex",gap:8,flexWrap:"wrap"}}>{user.role==="owner"||user.role==="manager"?<a href="/ops/admin" style={{...button(false),textDecoration:"none"}}>لوحة الإدارة</a>:null}<button type="button" onClick={logout} style={button(false)}>تسجيل خروج</button></div></header>
+  {message&&<Notice text={message}/>}<section style={{...card,marginBottom:16,display:"flex",justifyContent:"space-between",gap:14,alignItems:"center",flexWrap:"wrap"}}><div><div style={{fontWeight:900,fontSize:18}}>الشفت</div>{shift?<div style={{color:"#86efac",marginTop:5}}>مفتوح — {shift.shift_name} — منذ {new Date(shift.opened_at).toLocaleTimeString("ar-IQ",{hour:"2-digit",minute:"2-digit"})}</div>:<div style={{color:"#fca5a5",marginTop:5}}>لا يوجد شفت مفتوح</div>}</div>{shift?<button type="button" onClick={closeShift} style={button(false)}>إغلاق الشفت</button>:<button type="button" onClick={openShift} style={button(true)}>فتح الشفت</button>}</section>
 
-    <form onSubmit={submitEntry} style={{...card,opacity:shift?1:.55,pointerEvents:shift?"auto":"none"}}>
-      <div style={{display:"flex",justifyContent:"space-between",gap:12,alignItems:"center",flexWrap:"wrap",marginBottom:12}}><div><h2 style={{margin:0}}>تسجيل دخول مسافر</h2><div style={{color:"#94a3b8",marginTop:5}}>حالياً يدعم الإدخال اليدوي ونص قارئ الباركود؛ ربط الكاميرا/قارئ QR بالمرحلة التالية.</div></div><div style={{padding:"7px 10px",border:"1px solid #334155",borderRadius:10,color:"#cbd5e1"}}>SCAN / MANUAL</div></div>
-      <Field label="نص الباركود / Boarding Pass Raw Data (اختياري)"><textarea rows={3} style={{...input,resize:"vertical"}} value={entry.boardingRaw} onChange={e=>setEntry({...entry,boardingRaw:e.target.value})} placeholder="عند استخدام قارئ USB/Bluetooth ينزل النص هنا"/></Field>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:10}}>
-        <Field label="اسم المسافر"><input required style={input} value={entry.passengerName} onChange={e=>setEntry({...entry,passengerName:e.target.value})}/></Field>
-        <Field label="شركة الطيران"><input style={input} value={entry.airline} onChange={e=>setEntry({...entry,airline:e.target.value})}/></Field>
-        <Field label="رقم الرحلة"><input style={input} value={entry.flightNumber} onChange={e=>setEntry({...entry,flightNumber:e.target.value})}/></Field>
-        <Field label="من"><input style={input} value={entry.origin} onChange={e=>setEntry({...entry,origin:e.target.value})}/></Field>
-        <Field label="إلى"><input style={input} value={entry.destination} onChange={e=>setEntry({...entry,destination:e.target.value})}/></Field>
-        <Field label="المقعد"><input style={input} value={entry.seat} onChange={e=>setEntry({...entry,seat:e.target.value})}/></Field>
-      </div>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:10}}>
-        <Field label="طريقة الحساب"><select style={input} value={entry.paymentType} onChange={e=>setEntry({...entry,paymentType:e.target.value})}>{paymentLabels.map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></Field>
-        {entry.paymentType==="credit"?<Field label="الجهة / الشركة المحاسبة"><input required style={input} value={entry.billingCompany} onChange={e=>setEntry({...entry,billingCompany:e.target.value})} placeholder="مثال: الخطوط الجوية العراقية"/></Field>:null}
-        <Field label="المبلغ (د.ع)"><input inputMode="numeric" style={input} value={entry.amountIqd} onChange={e=>setEntry({...entry,amountIqd:e.target.value.replace(/\D/g,"")})}/></Field>
-      </div>
-      <Field label="ملاحظات"><input style={input} value={entry.notes} onChange={e=>setEntry({...entry,notes:e.target.value})}/></Field>
-      <button style={{...button(true),width:"100%",fontSize:17,padding:"13px"}}>تأكيد دخول المسافر</button>
-    </form>
-  </div></Shell>
+  <form onSubmit={submitEntry} style={{...card,opacity:shift?1:.55,pointerEvents:shift?"auto":"none"}}>
+    <div style={{display:"flex",justifyContent:"space-between",gap:12,alignItems:"center",flexWrap:"wrap",marginBottom:12}}><div><h2 style={{margin:0}}>تسجيل دخول مسافر</h2><div style={{color:"#94a3b8",marginTop:5}}>كاميرا مباشرة + قارئ خارجي + رفع صورة/ملف + إدخال يدوي.</div></div><div style={{padding:"7px 10px",border:"1px solid #334155",borderRadius:10,color:"#86efac",fontWeight:800}}>SCAN READY</div></div>
+
+    <section style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:10,marginBottom:12}}>
+      <button type="button" onClick={cameraOn?stopCamera:startCamera} style={{...button(cameraOn),padding:"14px"}}>{cameraOn?"إيقاف الكاميرا":"فتح الكاميرا والمسح"}</button>
+      <label style={{...button(false),padding:"14px",textAlign:"center",display:"block"}}>رفع صورة أو PDF<input type="file" accept="image/*,application/pdf" capture={undefined} onChange={e=>onFile(e.target.files?.[0])} style={{display:"none"}}/></label>
+      <label style={{...button(false),padding:"14px",textAlign:"center",display:"block"}}>التقاط صورة بالكاميرا<input type="file" accept="image/*" capture="environment" onChange={e=>onFile(e.target.files?.[0])} style={{display:"none"}}/></label>
+    </section>
+    {cameraOn?<div style={{...card,padding:8,marginBottom:12,background:"#050b13"}}><video ref={videoRef} muted playsInline style={{width:"100%",maxHeight:420,borderRadius:12,objectFit:"cover"}}/></div>:null}
+    {(scanStatus||fileName)?<div style={{background:"#0b1726",border:"1px solid #334155",borderRadius:12,padding:"10px 12px",marginBottom:12,color:"#cbd5e1"}}>{fileName?<div style={{fontWeight:800,marginBottom:4}}>الملف: {fileName}</div>:null}{scanStatus}</div>:null}
+
+    <Field label="نص الباركود / Boarding Pass Raw Data"><textarea rows={3} style={{...input,resize:"vertical"}} value={entry.boardingRaw} onChange={e=>setEntry({...entry,boardingRaw:e.target.value})} placeholder="ينملأ تلقائياً من الكاميرا أو قارئ USB/Bluetooth، وتكدر تكتبه يدوياً"/></Field>
+    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:10}}><Field label="اسم المسافر"><input required style={input} value={entry.passengerName} onChange={e=>setEntry({...entry,passengerName:e.target.value})}/></Field><Field label="شركة الطيران"><input style={input} value={entry.airline} onChange={e=>setEntry({...entry,airline:e.target.value})}/></Field><Field label="رقم الرحلة"><input style={input} value={entry.flightNumber} onChange={e=>setEntry({...entry,flightNumber:e.target.value})}/></Field><Field label="من"><input style={input} value={entry.origin} onChange={e=>setEntry({...entry,origin:e.target.value})}/></Field><Field label="إلى"><input style={input} value={entry.destination} onChange={e=>setEntry({...entry,destination:e.target.value})}/></Field><Field label="المقعد"><input style={input} value={entry.seat} onChange={e=>setEntry({...entry,seat:e.target.value})}/></Field></div>
+    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:10}}><Field label="طريقة الحساب"><select style={input} value={entry.paymentType} onChange={e=>setEntry({...entry,paymentType:e.target.value})}>{paymentLabels.map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></Field>{entry.paymentType==="credit"?<Field label="الجهة / الشركة المحاسبة"><input required style={input} value={entry.billingCompany} onChange={e=>setEntry({...entry,billingCompany:e.target.value})} placeholder="مثال: الخطوط الجوية العراقية"/></Field>:null}<Field label="المبلغ (د.ع)"><input inputMode="numeric" style={input} value={entry.amountIqd} onChange={e=>setEntry({...entry,amountIqd:e.target.value.replace(/\D/g,"")})}/></Field></div>
+    <Field label="ملاحظات"><input style={input} value={entry.notes} onChange={e=>setEntry({...entry,notes:e.target.value})}/></Field><button style={{...button(true),width:"100%",fontSize:17,padding:"13px"}}>تأكيد دخول المسافر</button>
+  </form></div></Shell>
 }
 
 function Shell({children}:{children:React.ReactNode}){return <main dir="rtl" style={{minHeight:"100vh",background:"#07111f",color:"#f8fafc",padding:18,fontFamily:"Arial,sans-serif"}}>{children}</main>}
