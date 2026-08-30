@@ -1,3 +1,4 @@
+import { getVercelOidcToken } from "@vercel/oidc";
 import { AIRLINE_VALUES } from "@/lib/airlines";
 
 export const runtime = "nodejs";
@@ -11,9 +12,14 @@ type OpenAIResponse = { output?: Array<{ content?: Array<{ type?: string; text?:
 export async function POST(request: Request) {
   try {
     const openAiKey = process.env.OPENAI_API_KEY;
-    const gatewayToken = process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_OIDC_TOKEN;
+    let gatewayToken = process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_OIDC_TOKEN;
 
     if (!openAiKey && !gatewayToken) {
+      gatewayToken = await getVercelOidcToken();
+    }
+
+    if (!openAiKey && !gatewayToken) {
+      console.error("Ticket extraction auth unavailable: no OpenAI key, AI Gateway key, or Vercel OIDC token");
       return Response.json({ error: "خدمة قراءة التذكرة غير متاحة حالياً. يمكنك إكمال الحجز يدوياً." }, { status: 503 });
     }
 
