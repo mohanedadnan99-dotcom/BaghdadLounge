@@ -1,19 +1,42 @@
 import Link from "next/link";
 import { BrainCircuit, Command, DatabaseZap, Gauge, Settings2, ShieldCheck, UserCog, WalletCards, Wrench } from "lucide-react";
 
+const tools=[
+  {href:"/admin/employees",label:"الموظفون والصلاحيات",icon:UserCog},
+  {href:"/admin/operations",label:"التشغيل والإعدادات",icon:Settings2},
+  {href:"/admin/control",label:"مركز القيادة التنفيذي",icon:Gauge},
+  {href:"/admin/command",label:"مركز القيادة والبحث",icon:Command},
+  {href:"/admin/business",label:"الأعمال والمالية",icon:WalletCards},
+  {href:"/admin/security",label:"الأمان والتشغيل اليومي",icon:ShieldCheck},
+  {href:"/admin/governance",label:"الحوكمة والموثوقية",icon:DatabaseZap},
+  {href:"/admin/intelligence",label:"الذكاء الإداري",icon:BrainCircuit},
+  {href:"/admin/maintenance",label:"إدارة الصيانة",icon:Wrench},
+];
+
 export default function AdminLayout({children}:{children:React.ReactNode}){
-  return <>
-    {children}
-    <div className="fixed bottom-24 left-4 z-40 flex flex-col gap-2 print:hidden">
-      <Link href="/admin/employees" aria-label="الموظفون والصلاحيات" className="grid size-12 place-items-center rounded-full border border-white/20 bg-[#1f5568] text-[#f0c77f] shadow-xl"><UserCog className="size-5"/></Link>
-      <Link href="/admin/maintenance" aria-label="إدارة الصيانة" className="grid size-12 place-items-center rounded-full border border-white/20 bg-[#8a2d2d] text-white shadow-xl"><Wrench className="size-5"/></Link>
-      <Link href="/admin/intelligence" aria-label="مركز الذكاء الإداري" className="grid size-12 place-items-center rounded-full border border-white/20 bg-[#142b4a] text-[#f0c77f] shadow-xl"><BrainCircuit className="size-5"/></Link>
-      <Link href="/admin/governance" aria-label="الحوكمة والموثوقية" className="grid size-12 place-items-center rounded-full border border-white/20 bg-[#302b63] text-[#f0c77f] shadow-xl"><DatabaseZap className="size-5"/></Link>
-      <Link href="/admin/security" aria-label="الأمان والتشغيل اليومي" className="grid size-12 place-items-center rounded-full border border-white/20 bg-[#4b254f] text-[#f0c77f] shadow-xl"><ShieldCheck className="size-5"/></Link>
-      <Link href="/admin/business" aria-label="مركز الأعمال والمالية" className="grid size-12 place-items-center rounded-full border border-white/20 bg-[#0d4a44] text-[#d8b06d] shadow-xl"><WalletCards className="size-5"/></Link>
-      <Link href="/admin/control" aria-label="مركز القيادة التنفيذي" className="grid size-12 place-items-center rounded-full border border-white/20 bg-[#102d3b] text-[#d8b06d] shadow-xl"><Gauge className="size-5"/></Link>
-      <Link href="/admin/command" aria-label="مركز القيادة والبحث" className="grid size-12 place-items-center rounded-full border border-white/20 bg-[#123f58] text-[#d8b06d] shadow-xl"><Command className="size-5"/></Link>
-      <Link href="/admin/operations" aria-label="التشغيل والإعدادات" className="grid size-12 place-items-center rounded-full border border-white/20 bg-[#d8b06d] text-[#123f58] shadow-xl"><Settings2 className="size-5"/></Link>
+  return <div className="min-h-screen bg-[#071f2b]">
+    <div className="mx-auto flex max-w-[1680px] gap-4 px-3 py-3 lg:px-5">
+      <aside className="sticky top-3 hidden h-[calc(100vh-24px)] w-64 shrink-0 overflow-y-auto rounded-3xl border border-white/10 bg-[#0b2b39]/95 p-3 shadow-2xl backdrop-blur lg:block print:hidden">
+        <div className="mb-3 border-b border-white/10 px-3 pb-3">
+          <div className="text-[11px] font-semibold tracking-[.22em] text-[#d8b06d]">LOUNGE BAGHDAD</div>
+          <div className="mt-1 text-sm font-bold text-white">مراكز الإدارة</div>
+        </div>
+        <nav className="space-y-1.5">
+          {tools.map(({href,label,icon:Icon})=><Link key={href} href={href} className="group flex items-center gap-3 rounded-2xl border border-transparent px-3 py-3 text-sm font-semibold text-white/75 transition hover:border-white/10 hover:bg-white/7 hover:text-white">
+            <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-white/7 text-[#d8b06d] transition group-hover:bg-[#d8b06d] group-hover:text-[#102d3b]"><Icon className="size-4.5"/></span>
+            <span>{label}</span>
+          </Link>)}
+        </nav>
+      </aside>
+      <main className="min-w-0 flex-1">{children}</main>
     </div>
-  </>;
+
+    <div className="fixed inset-x-3 bottom-3 z-50 overflow-x-auto rounded-2xl border border-white/10 bg-[#0b2b39]/95 p-2 shadow-2xl backdrop-blur lg:hidden print:hidden">
+      <div className="flex min-w-max gap-2">
+        {tools.map(({href,label,icon:Icon})=><Link key={href} href={href} className="flex items-center gap-2 rounded-xl bg-white/6 px-3 py-2.5 text-xs font-semibold text-white/85">
+          <Icon className="size-4 text-[#d8b06d]"/><span>{label}</span>
+        </Link>)}
+      </div>
+    </div>
+  </div>;
 }
