@@ -1,6 +1,7 @@
 import { opsSessionFromRequest } from "@/lib/lounge-ops-auth";
 import { createOpsEntry, getOpenOpsShift, type OpsPaymentType } from "@/lib/lounge-ops-db";
 import { parseIataBcbp } from "@/lib/boarding-pass";
+import { syncOpsEntryToGoogleSheet } from "@/lib/ops-sheet-sync";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -39,7 +40,8 @@ export async function POST(request: Request) {
       entrySource: body.entrySource === "manual" || body.entrySource === "ticket_image" ? body.entrySource : "scan",
       notes: String(body.notes || "")
     });
-    return Response.json({ entry, parsed }, { status: 201 });
+    const sync = await syncOpsEntryToGoogleSheet(Number((entry as any).id));
+    return Response.json({ entry, parsed, sheetSync: sync.status }, { status: 201 });
   } catch (error) {
     console.error("ops entries", error);
     return Response.json({ message: error instanceof Error ? error.message : "تعذر تسجيل المسافر" }, { status: 400 });
