@@ -1,4 +1,5 @@
 import { adminSessionFromRequest } from "@/lib/admin-auth";
+import { opsSessionFromRequest } from "@/lib/lounge-ops-auth";
 import { createOpsEmployee, listOpsEmployees, opsDashboard, updateOpsEmployee, type OpsRole, type OpsShiftName } from "@/lib/lounge-ops-db";
 
 export const runtime = "nodejs";
@@ -6,7 +7,12 @@ export const dynamic = "force-dynamic";
 
 const roles: OpsRole[] = ["owner","manager","reception","supervisor","accountant"];
 const shifts: OpsShiftName[] = ["الصباحي","المسائي","الليلي"];
-function owner(request: Request) { const s = adminSessionFromRequest(request); return s?.role === "owner" ? s : null; }
+function owner(request: Request) {
+  const ops = opsSessionFromRequest(request);
+  if (ops?.role === "owner") return ops;
+  const admin = adminSessionFromRequest(request);
+  return admin?.role === "owner" ? admin : null;
+}
 
 export async function GET(request: Request) {
   if (!owner(request)) return Response.json({ message: "صلاحية المالك فقط" }, { status: 403 });
