@@ -20,6 +20,8 @@ export async function POST(request: Request) {
     if (!passengerName) return Response.json({ message: "اسم المسافر مطلوب أو امسح Boarding Pass صالح" }, { status: 400 });
     if (!payments.includes(paymentType)) return Response.json({ message: "طريقة الحساب غير صحيحة" }, { status: 400 });
     if (paymentType === "credit" && !String(body.billingCompany || "").trim()) return Response.json({ message: "حدد الشركة التي سيحسب عليها المسافر" }, { status: 400 });
+    const requestedAmount = Number(body.amountIqd);
+    const amountIqd = Number.isFinite(requestedAmount) && requestedAmount > 0 ? requestedAmount : 40000;
     const entry = await createOpsEntry({
       passengerName,
       airline: String(body.airline || parsed?.carrier || ""),
@@ -31,7 +33,7 @@ export async function POST(request: Request) {
       boardingRaw,
       paymentType,
       billingCompany: String(body.billingCompany || ""),
-      amountIqd: Number(body.amountIqd || 0),
+      amountIqd,
       employeeId: session.employeeId,
       shiftId: Number(shift.id),
       entrySource: body.entrySource === "manual" || body.entrySource === "ticket_image" ? body.entrySource : "scan",
