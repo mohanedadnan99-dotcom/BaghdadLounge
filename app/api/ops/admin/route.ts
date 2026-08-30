@@ -1,7 +1,8 @@
 import { adminSessionFromRequest } from "@/lib/admin-auth";
 import { opsSessionFromRequest } from "@/lib/lounge-ops-auth";
-import { createOpsEmployee, listOpsEmployees, opsDashboard, updateOpsEmployee, type OpsRole, type OpsShiftName } from "@/lib/lounge-ops-db";
+import { createOpsEmployee, getOpsSyncStatus, listOpsAudit, listOpsEmployees, listPendingOpsEntries, opsDashboard, searchOpsEntries, updateOpsEmployee, type OpsRole, type OpsShiftName } from "@/lib/lounge-ops-db";
 import { getOpsEmployeeLounges, loungeDashboardStatus, OPS_LOUNGES, setOpsEmployeeLounge, type OpsLoungeName } from "@/lib/lounge-ops-lounges";
+import { syncOpsEntryToGoogleSheet } from "@/lib/ops-sheet-sync";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,16 +19,18 @@ function owner(request: Request) {
 export async function GET(request: Request) {
   if (!owner(request)) return Response.json({ message: "صلاحية المالك فقط" }, { status: 403 });
   try {
-    const action = new URL(request.url).searchParams.get("action") || "dashboard";
+    const url = new URL(request.url);
+    const action = url.searchParams.get("action") || "dashboard";
     if (action === "employees") {
       const [employees, loungesById] = await Promise.all([listOpsEmployees(), getOpsEmployeeLounges()]);
-      return Response.json({
-        employees: employees.map((employee) => ({ ...employee, loungeName: loungesById.get(employee.id) || "لاونج بغداد" })),
-        roles,
-        shifts,
-        lounges: OPS_LOUNGES,
-      }, { headers: { "Cache-Control": "no-store" } });
+      return Response.json({ employees: employees.map((employee) => ({ ...employee, loungeName: loungesById.get(employee.id) || employee.loungeName || "لاونج بغداد" })), roles, shifts, lounges: OPS_LOUNGES }, { headers: { "Cache-Control": "no-store" } });
     }
+    if (action === "search") {
+      const q = String(url.searchParams.get("q") || "").trim();
+      return Response.json({ results: q ? await searchOpsEntries(q) : [] }, { headers: { "Cache-Control":"no-store" } });
+    }
+    if (action === "audit") return Response.json({ audit: await listOpsAudit(150) }, { headers: { "Cache-Control":"no-store" } });
+    if (action === "sync") return Response.json({ sync: await getOpsSyncStatus(), pending: await listPendingOpsEntries(100) }, { headers: { "Cache-Control":"no-store" } });
     const [dashboard, lounges] = await Promise.all([opsDashboard(), loungeDashboardStatus()]);
     return Response.json({ ...dashboard, lounges }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
@@ -37,9 +40,23 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  if (!owner(request)) return Response.json({ message: "صلاحية المالك فقط" }, { status: 403 });
+  const auth = owner(request);
+  if (!auth) return Response.json({ message: "صلاحية المالك فقط" }, { status: 403 });
   try {
     const body = await request.json() as Record<string, unknown>;
+    if (body.action === "retrySync") {
+      const entryId = Number(body.entryId);
+      if (!Number.isInteger(entryId) || entryId <= 0) return Response.json({ message:"رقم العملية غير صحيح" }, { status:400 });
+      const result = await syncOpsEntryToGoogleSheet(entryId);
+      return Response.json({ result });
+    }
+    if (body.action === "retryAllSync") {
+      const pending = await listPendingOpsEntries(100);
+      const results = [];
+      for (const row of pending as any[]) results.push({ id:Number(row.id), ...(await syncOpsEntryToGoogleSheet(Number(row.id))) });
+      return Response.json({ results, sync: await getOpsSyncStatus() });
+    }
+
     const name = String(body.name || "").trim();
     const username = String(body.username || "").trim();
     const password = String(body.password || "");
@@ -54,7 +71,7 @@ export async function POST(request: Request) {
   } catch (error: any) {
     console.error("ops admin POST", error);
     const duplicate = String(error?.message || "").toLowerCase().includes("unique");
-    return Response.json({ message: duplicate ? "اسم المستخدم مستخدم مسبقاً" : error instanceof Error ? error.message : "تعذر إضافة الموظف" }, { status: 400 });
+    return Response.json({ message: duplicate ? "اسم المستخدم مستخدم مسبقاً" : error instanceof Error ? error.message : "تعذر تنفيذ العملية" }, { status: 400 });
   }
 }
 
