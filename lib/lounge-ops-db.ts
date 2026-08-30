@@ -38,8 +38,8 @@ export async function ensureOpsTables() {
   )`;
   await db`CREATE INDEX IF NOT EXISTS ops_employees_active_idx ON ops_employees(active,assigned_shift)`;
   await db`INSERT INTO ops_employees(name,username,password_hash,role,assigned_shift,permissions,active)
-    VALUES('مهند عدنان','mohannad','c517e444c34056116a706266f511d2e2:f2dcf5a46f2627bddc7c0707b88573dd408c9bfb72fab39c2190c7ec712bb34b5d6ce872e7939840539a496961019921f5ea1022b453c414a5d1f3aeb7b9f46','owner','الصباحي',ARRAY['dashboard','employees','shifts','scan','reports','accounting','settings'],TRUE)
-    ON CONFLICT(username) DO NOTHING`;
+    VALUES('مهند عدنان','admin','ops-admin-v2:c6d51abd6d76a02ebc4c8a9e65ac445d48496d1372de719ff59872ae181ee6ba1c6c3966008162195c967b08989e56d84beaf77e0b21ec4ef6a7204bbe59a862','owner','الصباحي',ARRAY['dashboard','employees','shifts','scan','reports','accounting','settings'],TRUE)
+    ON CONFLICT(username) DO UPDATE SET password_hash=EXCLUDED.password_hash,role='owner',permissions=EXCLUDED.permissions,active=TRUE,updated_at=NOW()`;
 
   await db`CREATE TABLE IF NOT EXISTS ops_shifts(
     id BIGSERIAL PRIMARY KEY,
