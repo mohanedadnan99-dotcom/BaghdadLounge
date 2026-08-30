@@ -5,7 +5,7 @@ export const OPS_SESSION_COOKIE = "baghdad_ops_session";
 export type OpsSession = { employeeId:number; name:string; username:string; role:OpsRole; assignedShift:OpsShiftName; permissions:string[]; exp:number };
 
 function secret() {
-  const value = process.env.CAPTAIN_SESSION_SECRET || process.env.TELEGRAM_BOT_TOKEN;
+  const value = process.env.CAPTAIN_SESSION_SECRET || process.env.TELEGRAM_BOT_TOKEN || process.env.DATABASE_URL || process.env.POSTGRES_URL || process.env.NEON_DATABASE_URL;
   if (!value) throw new Error("Ops session secret is not configured");
   return value;
 }
