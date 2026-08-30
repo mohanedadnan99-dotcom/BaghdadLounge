@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Noto_Sans_Arabic, Manrope } from "next/font/google";
+import { TicketOcrFetchBridge } from "@/components/ticket-ocr-fetch-bridge";
 import "./globals.css";
 
 const arabic = Noto_Sans_Arabic({ subsets: ["arabic"], variable: "--font-arabic", weight: ["300", "400", "500", "600", "700"] });
@@ -18,7 +19,7 @@ export const viewport: Viewport = { width: "device-width", initialScale: 1, them
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="ar" dir="rtl" className={`${arabic.variable} ${latin.variable}`}>
-      <body>{children}</body>
+      <body><TicketOcrFetchBridge />{children}</body>
     </html>
   );
 }
