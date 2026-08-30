@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { BrainCircuit, Command, DatabaseZap, Gauge, Settings2, ShieldCheck, UserCog, WalletCards, Wrench } from "lucide-react";
+import AdminLogoutButton from "./logout-button";
 
 const tools=[
   {href:"/admin/employees",label:"الموظفون والصلاحيات",icon:UserCog},
@@ -27,8 +28,9 @@ export default function AdminLayout({children}:{children:React.ReactNode}){
             <span>{label}</span>
           </Link>)}
         </nav>
+        <AdminLogoutButton/>
       </aside>
-      <main className="min-w-0 flex-1">{children}</main>
+      <main className="min-w-0 flex-1 pb-24 lg:pb-0">{children}</main>
     </div>
 
     <div className="fixed inset-x-3 bottom-3 z-50 overflow-x-auto rounded-2xl border border-white/10 bg-[#0b2b39]/95 p-2 shadow-2xl backdrop-blur lg:hidden print:hidden">
@@ -36,6 +38,7 @@ export default function AdminLayout({children}:{children:React.ReactNode}){
         {tools.map(({href,label,icon:Icon})=><Link key={href} href={href} className="flex items-center gap-2 rounded-xl bg-white/6 px-3 py-2.5 text-xs font-semibold text-white/85">
           <Icon className="size-4 text-[#d8b06d]"/><span>{label}</span>
         </Link>)}
+        <AdminLogoutButton mobile/>
       </div>
     </div>
   </div>;
