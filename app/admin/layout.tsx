@@ -15,7 +15,7 @@ const tools=[
 ];
 
 export default function AdminLayout({children}:{children:React.ReactNode}){
-  return <div className="min-h-screen bg-[#071f2b]">
+  return <div className="min-h-screen bg-[#071f2b]" data-admin-layout="v2">
     <div className="mx-auto flex max-w-[1680px] gap-4 px-3 py-3 lg:px-5">
       <aside className="sticky top-3 hidden h-[calc(100vh-24px)] w-64 shrink-0 overflow-y-auto rounded-3xl border border-white/10 bg-[#0b2b39]/95 p-3 shadow-2xl backdrop-blur lg:block print:hidden">
         <div className="mb-3 border-b border-white/10 px-3 pb-3">
