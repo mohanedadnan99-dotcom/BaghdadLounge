@@ -59,7 +59,7 @@ export async function loungeDashboardStatus() {
         COALESCE(SUM(e.amount_iqd),0)::bigint total_iqd,
         COALESCE(SUM(e.amount_iqd) FILTER(WHERE e.payment_type='cash'),0)::bigint cash_iqd
       FROM ops_employees u
-      LEFT JOIN ops_entries e ON e.employee_id=u.id AND e.created_at>=CURRENT_DATE
+      LEFT JOIN ops_entries e ON e.employee_id=u.id AND e.created_at>=CURRENT_DATE AND e.lounge_status<>'cancelled'
       GROUP BY u.lounge_name
     `,
     db`

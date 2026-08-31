@@ -3,19 +3,24 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   BellRing,
+  Banknote,
   Camera,
   CheckCircle2,
+  ClipboardCheck,
   Clock3,
   DoorOpen,
   LogOut,
+  Pencil,
   Plane,
   RefreshCw,
   ScanLine,
   Search,
   Settings2,
+  Trash2,
   Upload,
   UserCheck,
   Users,
+  X,
 } from "lucide-react";
 import { parseIataBcbp } from "@/lib/boarding-pass";
 import styles from "./door.module.css";
@@ -23,6 +28,7 @@ import styles from "./door.module.css";
 type User = { employeeId?: number; id?: number; name: string; username: string; role: string; assignedShift: string };
 type Shift = { id: number; shift_name: string; opened_at: string } | null;
 type PassengerStatus = "inside" | "called" | "departed";
+type ShiftRecipient = { id: number; name: string; username: string; assigned_shift: string; role: string };
 type LoungePassenger = {
   id: number;
   reference: string;
@@ -32,11 +38,23 @@ type LoungePassenger = {
   destination: string;
   seat: string;
   departure_at: string | null;
+  gate_number: string;
   lounge_status: PassengerStatus;
   gate_called_at: string | null;
   gate_departed_at: string | null;
   created_at: string;
   employee_name: string;
+};
+type PendingHandover = {
+  id: number;
+  outgoing_employee_name: string;
+  outgoing_shift_name: string;
+  passengers_snapshot: LoungePassenger[];
+  handover_note: string;
+  expected_cash_iqd: number;
+  closing_cash_iqd: number;
+  cash_difference_iqd: number;
+  created_at: string;
 };
 type EntryState = {
   passengerName: string;
@@ -46,6 +64,7 @@ type EntryState = {
   destination: string;
   seat: string;
   departureAt: string;
+  gateNumber: string;
   paymentType: string;
   billingCompany: string;
   amountIqd: string;
@@ -70,6 +89,7 @@ const blankEntry = (): EntryState => ({
   destination: "",
   seat: "",
   departureAt: "",
+  gateNumber: "",
   paymentType: "cash",
   billingCompany: "",
   amountIqd: "40000",
@@ -80,6 +100,11 @@ const blankEntry = (): EntryState => ({
 export default function OpsStaffPage() {
   const [user, setUser] = useState<User | null>(null);
   const [shift, setShift] = useState<Shift>(null);
+  const [shiftRecipients, setShiftRecipients] = useState<ShiftRecipient[]>([]);
+  const [pendingHandover, setPendingHandover] = useState<PendingHandover | null>(null);
+  const [showHandover, setShowHandover] = useState(false);
+  const [handoverForm, setHandoverForm] = useState({ incomingEmployeeId: "", note: "", closingCashIqd: "" });
+  const [handoverSaving, setHandoverSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
   const [login, setLogin] = useState({ username: "", password: "" });
@@ -88,6 +113,8 @@ export default function OpsStaffPage() {
   const [passengersLoading, setPassengersLoading] = useState(false);
   const [passengerQuery, setPassengerQuery] = useState("");
   const [pendingPassengerId, setPendingPassengerId] = useState<number | null>(null);
+  const [editingPassenger, setEditingPassenger] = useState<LoungePassenger | null>(null);
+  const [editFlight, setEditFlight] = useState({ departureAt: "", gateNumber: "", reason: "" });
   const [alertsEnabled, setAlertsEnabled] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const [cameraOn, setCameraOn] = useState(false);
@@ -118,6 +145,8 @@ export default function OpsStaffPage() {
     if (res.ok) {
       const data = await res.json();
       setShift(data.shift || null);
+      setShiftRecipients(Array.isArray(data.recipients) ? data.recipients : []);
+      setPendingHandover(data.pendingHandover || null);
     }
   }
 
@@ -186,6 +215,8 @@ export default function OpsStaffPage() {
     await fetch("/api/ops/session", { method: "DELETE" });
     setUser(null);
     setShift(null);
+    setShiftRecipients([]);
+    setPendingHandover(null);
     setPassengers([]);
     setMessage("");
   }
@@ -199,15 +230,32 @@ export default function OpsStaffPage() {
       return;
     }
     setShift(data.shift);
+    setShiftRecipients(Array.isArray(data.recipients) ? data.recipients : []);
+    setPendingHandover(data.pendingHandover || null);
     setMessage("تم فتح الشفت");
   }
 
-  async function closeShift() {
-    if (!confirm("تأكيد إغلاق الشفت وإظهار التقرير النهائي؟")) return;
-    stopCamera();
-    const cash = prompt("النقد الفعلي الموجود عند الإغلاق (اختياري). اتركه فارغ حتى يعتمد المتوقع تلقائياً:", "");
-    const body: { note: string; closingCashIqd?: number } = { note: "" };
-    if (cash?.trim()) body.closingCashIqd = Number(cash.replace(/\D/g, ""));
+  function startCloseShift() {
+    setMessage("");
+    setHandoverForm({ incomingEmployeeId: "", note: "", closingCashIqd: "" });
+    setShowHandover(true);
+  }
+
+  async function closeShift(event: React.FormEvent) {
+    event.preventDefault();
+    const remaining = passengers.filter((passenger) => passenger.lounge_status === "inside" || passenger.lounge_status === "called");
+    if (remaining.length && !handoverForm.incomingEmployeeId) {
+      setMessage("حدد مسؤول الشفت المستلم لأن أكو مسافرين بعدهم داخل الصالة");
+      return;
+    }
+    setHandoverSaving(true);
+    setMessage("");
+    const body: { action: string; note: string; incomingEmployeeId?: number; closingCashIqd?: number } = {
+      action: "close",
+      note: handoverForm.note.trim(),
+    };
+    if (handoverForm.incomingEmployeeId) body.incomingEmployeeId = Number(handoverForm.incomingEmployeeId);
+    if (handoverForm.closingCashIqd.trim()) body.closingCashIqd = Number(handoverForm.closingCashIqd);
     const res = await fetch("/api/ops/shift", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -216,11 +264,41 @@ export default function OpsStaffPage() {
     const data = await res.json();
     if (!res.ok) {
       setMessage(data.message || "تعذر إغلاق الشفت");
+      setHandoverSaving(false);
       return;
     }
+    stopCamera();
     setShift(null);
+    setShowHandover(false);
+    setHandoverSaving(false);
     const summary = data.shift?.summary || {};
-    setMessage(`تم إغلاق الشفت — المسافرين: ${Number(summary.passengers || 0)} | المجموع: ${Number(summary.total_iqd || 0).toLocaleString("en-US")} د.ع | النقد المتوقع: ${Number(summary.expectedCashIqd || 0).toLocaleString("en-US")} د.ع | الفرق: ${Number(summary.cashDifferenceIqd || 0).toLocaleString("en-US")} د.ع`);
+    const recipient = data.shift?.handover?.incomingEmployee?.name;
+    setMessage(`تم إغلاق الشفت${recipient ? ` وتسليمه إلى ${recipient}` : ""} — المسافرين: ${Number(summary.passengers || 0)} | المجموع: ${Number(summary.total_iqd || 0).toLocaleString("en-US")} د.ع | فرق النقد: ${Number(summary.cashDifferenceIqd || 0).toLocaleString("en-US")} د.ع`);
+    await refreshShift();
+  }
+
+  async function acceptHandover() {
+    if (!pendingHandover) return;
+    if (!shift) {
+      setMessage("افتح شفتك أولاً وبعدها أكد استلام التسليم");
+      return;
+    }
+    setHandoverSaving(true);
+    const res = await fetch("/api/ops/shift", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "accept_handover", handoverId: pendingHandover.id }),
+    });
+    const data = await res.json();
+    setHandoverSaving(false);
+    if (!res.ok) {
+      setMessage(data.message || "تعذر تأكيد استلام الشفت");
+      return;
+    }
+    setPendingHandover(data.pendingHandover || null);
+    setShiftRecipients(Array.isArray(data.recipients) ? data.recipients : shiftRecipients);
+    setMessage("تم تأكيد استلام الشفت والمسافرين المتبقين بنجاح");
+    await refreshPassengers(true);
   }
 
   async function submitEntry(event: React.FormEvent) {
@@ -277,6 +355,66 @@ export default function OpsStaffPage() {
     }
   }
 
+  function startEditPassenger(passenger: LoungePassenger) {
+    setEditingPassenger(passenger);
+    setEditFlight({
+      departureAt: passenger.departure_at ? toBaghdadDateTimeInput(passenger.departure_at) : "",
+      gateNumber: passenger.gate_number || "",
+      reason: "",
+    });
+  }
+
+  async function submitFlightEdit(event: React.FormEvent) {
+    event.preventDefault();
+    if (!editingPassenger) return;
+    setPendingPassengerId(editingPassenger.id);
+    const res = await fetch("/api/ops/entries", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "update_flight",
+        id: editingPassenger.id,
+        departureAt: editFlight.departureAt,
+        gateNumber: editFlight.gateNumber,
+        reason: editFlight.reason,
+      }),
+    });
+    const data = await res.json();
+    setPendingPassengerId(null);
+    if (!res.ok) {
+      setMessage(data.message || "تعذر تعديل معلومات الرحلة");
+      return;
+    }
+    setEditingPassenger(null);
+    setMessage(`تم تحديث وقت الإقلاع والبوابة للمسافر ${data.passenger.passenger_name}`);
+    alertedPassengerIds.current.delete(data.passenger.id);
+    await refreshPassengers(true);
+  }
+
+  async function voidPassenger(passenger: LoungePassenger) {
+    const reason = prompt(`سبب إلغاء إدخال ${passenger.passenger_name} (إلزامي):`, "");
+    if (reason === null) return;
+    if (reason.trim().length < 3) {
+      setMessage("لازم تكتب سبب واضح لإلغاء الإدخال");
+      return;
+    }
+    if (!confirm(`تأكيد إلغاء إدخال ${passenger.passenger_name}؟ راح ينشال من القائمة والحساب.`)) return;
+    setPendingPassengerId(passenger.id);
+    const res = await fetch("/api/ops/entries", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "void", id: passenger.id, reason: reason.trim() }),
+    });
+    const data = await res.json();
+    setPendingPassengerId(null);
+    if (!res.ok) {
+      setMessage(data.message || "تعذر إلغاء الإدخال");
+      return;
+    }
+    setMessage(`تم إلغاء إدخال ${passenger.passenger_name} وتسجيل السبب في سجل العمليات`);
+    await refreshPassengers(true);
+  }
+
   async function enableAlerts() {
     alertsArmedRef.current = true;
     let permission: NotificationPermission | "unsupported" = "unsupported";
@@ -301,7 +439,7 @@ export default function OpsStaffPage() {
       try { navigator.vibrate?.([160, 90, 160]); } catch {}
       if ("Notification" in window && Notification.permission === "granted") {
         new Notification("تنبيه بوابة — لاونج بغداد", {
-          body: `${passenger.passenger_name} · الرحلة ${passenger.flight_number || "غير محددة"} · حان وقت التوجه للبوابة`,
+          body: `${passenger.passenger_name} · الرحلة ${passenger.flight_number || "غير محددة"}${passenger.gate_number ? ` · البوابة ${passenger.gate_number}` : ""} · حان وقت التوجه للبوابة`,
           tag: `baghdad-lounge-gate-${passenger.id}`,
           requireInteraction: true,
         });
@@ -484,11 +622,12 @@ export default function OpsStaffPage() {
   const visiblePassengers = useMemo(() => {
     const query = passengerQuery.trim().toLowerCase();
     return passengers
-      .filter((passenger) => !query || [passenger.passenger_name, passenger.reference, passenger.flight_number, passenger.airline, passenger.destination].some((value) => String(value || "").toLowerCase().includes(query)))
+      .filter((passenger) => !query || [passenger.passenger_name, passenger.reference, passenger.flight_number, passenger.airline, passenger.destination, passenger.gate_number].some((value) => String(value || "").toLowerCase().includes(query)))
       .sort((first, second) => passengerPriority(first, now) - passengerPriority(second, now) || departureTimestamp(first) - departureTimestamp(second));
   }, [passengers, passengerQuery, now]);
 
   const criticalPassengers = useMemo(() => passengers.filter((passenger) => isGateAlertDue(passenger, now)), [passengers, now]);
+  const remainingPassengers = passengers.filter((passenger) => passenger.lounge_status === "inside" || passenger.lounge_status === "called");
   const insideCount = passengers.filter((passenger) => passenger.lounge_status === "inside").length;
   const calledCount = passengers.filter((passenger) => passenger.lounge_status === "called").length;
 
@@ -533,12 +672,30 @@ export default function OpsStaffPage() {
 
       {message && <Notice text={message} />}
 
+      {pendingHandover ? <section className={styles.handoverBanner}>
+        <div className={styles.handoverIcon}><ClipboardCheck size={24} /></div>
+        <div className={styles.handoverCopy}>
+          <div className={styles.eyebrow}>تسليم شفت بانتظارك</div>
+          <strong>{pendingHandover.outgoing_employee_name} سلّم لك شفت {pendingHandover.outgoing_shift_name}</strong>
+          <span>
+            {(pendingHandover.passengers_snapshot || []).length
+              ? `${pendingHandover.passengers_snapshot.length} مسافر متبقّي: ${pendingHandover.passengers_snapshot.map((passenger) => passenger.passenger_name).join("، ")}`
+              : "لا يوجد مسافر متبقّي في التسليم"}
+          </span>
+          {pendingHandover.handover_note ? <span>الملاحظة: {pendingHandover.handover_note}</span> : null}
+          <span>النقد المسلّم: {Number(pendingHandover.closing_cash_iqd || 0).toLocaleString("en-US")} د.ع · الفرق: {Number(pendingHandover.cash_difference_iqd || 0).toLocaleString("en-US")} د.ع</span>
+        </div>
+        <button disabled={!shift || handoverSaving} type="button" onClick={acceptHandover} className={`${styles.button} ${styles.primaryButton}`}>
+          <UserCheck size={18} />{!shift ? "افتح شفتك أولاً" : handoverSaving ? "جاري الاستلام..." : "تأكيد الاستلام"}
+        </button>
+      </section> : null}
+
       <section className={`${styles.card} ${styles.shiftBar}`}>
         <div>
           <div className={styles.shiftTitle}>الشفت</div>
           {shift ? <div className={styles.shiftOpen}>مفتوح — {shift.shift_name} — منذ {new Date(shift.opened_at).toLocaleTimeString("ar-IQ", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Baghdad" })}</div> : <div className={styles.shiftClosed}>لا يوجد شفت مفتوح</div>}
         </div>
-        {shift ? <button type="button" onClick={closeShift} className={`${styles.button} ${styles.secondaryButton}`}>إغلاق الشفت</button> : <button type="button" onClick={openShift} className={`${styles.button} ${styles.primaryButton}`}>فتح الشفت</button>}
+        {shift ? <button type="button" onClick={startCloseShift} className={`${styles.button} ${styles.secondaryButton}`}>تسليم وإغلاق الشفت</button> : <button type="button" onClick={openShift} className={`${styles.button} ${styles.primaryButton}`}>فتح الشفت</button>}
       </section>
 
       <div className={styles.workGrid}>
@@ -569,7 +726,7 @@ export default function OpsStaffPage() {
           <div className={styles.passengerList}>
             {passengersLoading && !passengers.length ? <div className={styles.emptyState}>جاري تحميل المسافرين...</div> : null}
             {!passengersLoading && !visiblePassengers.length ? <div className={styles.emptyState}><DoorOpen size={28} /><strong>ماكو مسافرين حالياً</strong><span>أي مسافر يتم تأكيد دخوله راح يظهر هنا مباشرة.</span></div> : null}
-            {visiblePassengers.map((passenger) => <PassengerCard key={passenger.id} passenger={passenger} now={now} pending={pendingPassengerId === passenger.id} onStatus={updatePassengerStatus} />)}
+            {visiblePassengers.map((passenger) => <PassengerCard key={passenger.id} passenger={passenger} now={now} pending={pendingPassengerId === passenger.id} onStatus={updatePassengerStatus} onEdit={startEditPassenger} onVoid={voidPassenger} />)}
           </div>
         </aside>
 
@@ -601,6 +758,7 @@ export default function OpsStaffPage() {
             <Field label="شركة الطيران"><input className={styles.input} value={entry.airline} onChange={(event) => setEntry({ ...entry, airline: event.target.value })} /></Field>
             <Field label="رقم الرحلة"><input className={styles.input} value={entry.flightNumber} onChange={(event) => setEntry({ ...entry, flightNumber: event.target.value })} /></Field>
             <Field label="وقت الإقلاع — بتوقيت بغداد"><input required type="datetime-local" className={`${styles.input} ${styles.departureInput}`} value={entry.departureAt} onChange={(event) => setEntry({ ...entry, departureAt: event.target.value })} /></Field>
+            <Field label="رقم البوابة (إن وجد)"><input className={styles.input} maxLength={20} value={entry.gateNumber} onChange={(event) => setEntry({ ...entry, gateNumber: event.target.value })} placeholder="مثال: B4" /></Field>
             <Field label="من"><input className={styles.input} value={entry.origin} onChange={(event) => setEntry({ ...entry, origin: event.target.value })} /></Field>
             <Field label="إلى"><input className={styles.input} value={entry.destination} onChange={(event) => setEntry({ ...entry, destination: event.target.value })} /></Field>
             <Field label="المقعد"><input className={styles.input} value={entry.seat} onChange={(event) => setEntry({ ...entry, seat: event.target.value })} /></Field>
@@ -616,11 +774,74 @@ export default function OpsStaffPage() {
           <button className={`${styles.button} ${styles.confirmButton}`}><CheckCircle2 size={20} />تأكيد دخول المسافر وإضافته للقائمة</button>
         </form>
       </div>
+
+      {showHandover ? <div className={styles.modalBackdrop} role="presentation">
+        <form className={styles.modalCard} onSubmit={closeShift} role="dialog" aria-modal="true" aria-label="تسليم وإغلاق الشفت">
+          <div className={styles.modalHeader}>
+            <div><div className={styles.eyebrow}>إجراء نهاية الشفت</div><h2>تسليم وإغلاق الشفت</h2></div>
+            <button type="button" className={styles.iconButton} onClick={() => setShowHandover(false)} aria-label="إغلاق"><X size={19} /></button>
+          </div>
+
+          <div className={styles.remainingBox}>
+            <strong><Users size={18} />المسافرون المتبقّون ({remainingPassengers.length})</strong>
+            {remainingPassengers.length
+              ? <div className={styles.remainingList}>{remainingPassengers.map((passenger) => <span key={passenger.id}>{passenger.passenger_name} · {passenger.flight_number || "بلا رقم رحلة"}{passenger.gate_number ? ` · بوابة ${passenger.gate_number}` : ""}</span>)}</div>
+              : <span>ماكو مسافر باقٍ داخل الصالة؛ تقدر تغلق الشفت بدون تحديد مستلم.</span>}
+          </div>
+
+          <Field label={`مسؤول الشفت المستلم${remainingPassengers.length ? " — إلزامي" : " — اختياري"}`}>
+            <select required={remainingPassengers.length > 0} className={styles.input} value={handoverForm.incomingEmployeeId} onChange={(event) => setHandoverForm({ ...handoverForm, incomingEmployeeId: event.target.value })}>
+              <option value="">{remainingPassengers.length ? "اختر المسؤول المستلم" : "إغلاق بدون تسليم لشخص"}</option>
+              {shiftRecipients.map((recipient) => <option key={recipient.id} value={recipient.id}>{recipient.name} · {recipient.assigned_shift}</option>)}
+            </select>
+          </Field>
+          {remainingPassengers.length > 0 && !shiftRecipients.length ? <div className={styles.inlineWarning}>لا يوجد مسؤول آخر مفعّل لنفس الصالة. أضفه من لوحة الإدارة قبل إغلاق الشفت.</div> : null}
+
+          <div className={styles.handoverGrid}>
+            <Field label="النقد الفعلي عند التسليم (اختياري)">
+              <div className={styles.moneyInput}><Banknote size={18} /><input inputMode="numeric" className={styles.input} value={handoverForm.closingCashIqd} onChange={(event) => setHandoverForm({ ...handoverForm, closingCashIqd: event.target.value.replace(/\D/g, "") })} placeholder="يعتمد المتوقع إذا تركته فارغ" /></div>
+            </Field>
+            <Field label="ملاحظات للمسؤول المستلم">
+              <textarea rows={3} className={styles.input} value={handoverForm.note} onChange={(event) => setHandoverForm({ ...handoverForm, note: event.target.value })} placeholder="أي حالة خاصة أو متابعة مطلوبة" />
+            </Field>
+          </div>
+
+          <div className={styles.modalActions}>
+            <button type="button" onClick={() => setShowHandover(false)} className={`${styles.button} ${styles.secondaryButton}`}>رجوع</button>
+            <button disabled={handoverSaving || (remainingPassengers.length > 0 && !shiftRecipients.length)} className={`${styles.button} ${styles.confirmButton}`}><ClipboardCheck size={19} />{handoverSaving ? "جاري التسليم..." : "تأكيد التسليم وإغلاق الشفت"}</button>
+          </div>
+        </form>
+      </div> : null}
+
+      {editingPassenger ? <div className={styles.modalBackdrop} role="presentation">
+        <form className={`${styles.modalCard} ${styles.smallModal}`} onSubmit={submitFlightEdit} role="dialog" aria-modal="true" aria-label="تعديل معلومات الرحلة">
+          <div className={styles.modalHeader}>
+            <div><div className={styles.eyebrow}>تعديل رحلة</div><h2>{editingPassenger.passenger_name}</h2></div>
+            <button type="button" className={styles.iconButton} onClick={() => setEditingPassenger(null)} aria-label="إغلاق"><X size={19} /></button>
+          </div>
+          <div className={styles.fieldsGrid}>
+            <Field label="وقت الإقلاع — بتوقيت بغداد"><input required type="datetime-local" className={`${styles.input} ${styles.departureInput}`} value={editFlight.departureAt} onChange={(event) => setEditFlight({ ...editFlight, departureAt: event.target.value })} /></Field>
+            <Field label="رقم البوابة"><input maxLength={20} className={styles.input} value={editFlight.gateNumber} onChange={(event) => setEditFlight({ ...editFlight, gateNumber: event.target.value })} placeholder="مثال: B4" /></Field>
+          </div>
+          <Field label="سبب التعديل / ملاحظة"><input className={styles.input} value={editFlight.reason} onChange={(event) => setEditFlight({ ...editFlight, reason: event.target.value })} placeholder="مثال: تغيير وقت الرحلة" /></Field>
+          <div className={styles.modalActions}>
+            <button type="button" onClick={() => setEditingPassenger(null)} className={`${styles.button} ${styles.secondaryButton}`}>إلغاء</button>
+            <button disabled={pendingPassengerId === editingPassenger.id} className={`${styles.button} ${styles.primaryButton}`}><CheckCircle2 size={18} />حفظ التعديل</button>
+          </div>
+        </form>
+      </div> : null}
     </div>
   </Shell>;
 }
 
-function PassengerCard({ passenger, now, pending, onStatus }: { passenger: LoungePassenger; now: number; pending: boolean; onStatus: (id: number, status: PassengerStatus) => Promise<void> }) {
+function PassengerCard({ passenger, now, pending, onStatus, onEdit, onVoid }: {
+  passenger: LoungePassenger;
+  now: number;
+  pending: boolean;
+  onStatus: (id: number, status: PassengerStatus) => Promise<void>;
+  onEdit: (passenger: LoungePassenger) => void;
+  onVoid: (passenger: LoungePassenger) => Promise<void>;
+}) {
   const due = isGateAlertDue(passenger, now);
   const minutes = passenger.departure_at ? Math.ceil((new Date(passenger.departure_at).getTime() - now) / 60000) : null;
   const statusText = passenger.lounge_status === "inside" ? "داخل الصالة" : passenger.lounge_status === "called" ? "تم إبلاغه" : "غادر للبوابة";
@@ -635,12 +856,16 @@ function PassengerCard({ passenger, now, pending, onStatus }: { passenger: Loung
     <div className={styles.flightLine}><Plane size={16} /><span>{passenger.airline || "شركة غير محددة"} {passenger.flight_number ? `· ${passenger.flight_number}` : ""}</span>{passenger.destination ? <small>إلى {passenger.destination}</small> : null}</div>
     <div className={styles.timeBox}>
       <Clock3 size={17} />
-      <div><span>{passenger.departure_at ? formatBaghdadDeparture(passenger.departure_at) : "وقت الإقلاع غير محدد"}</span><strong>{countdownText(minutes)}</strong></div>
+      <div><span>{passenger.departure_at ? formatBaghdadDeparture(passenger.departure_at) : "وقت الإقلاع غير محدد"}{passenger.gate_number ? ` · البوابة ${passenger.gate_number}` : ""}</span><strong>{countdownText(minutes)}</strong></div>
     </div>
     {due ? <div className={styles.dueLabel}><BellRing size={16} />يجب إبلاغ المسافر الآن</div> : null}
     {passenger.lounge_status === "inside" ? <button disabled={pending} type="button" onClick={() => onStatus(passenger.id, "called")} className={`${styles.button} ${due ? styles.urgentButton : styles.primaryButton}`}>{pending ? "جاري الحفظ..." : "تم إبلاغه بالتوجه للبوابة"}</button> : null}
     {passenger.lounge_status === "called" ? <button disabled={pending} type="button" onClick={() => onStatus(passenger.id, "departed")} className={`${styles.button} ${styles.departButton}`}>{pending ? "جاري الحفظ..." : "غادر إلى البوابة"}</button> : null}
     {passenger.lounge_status === "departed" ? <div className={styles.completedLine}><CheckCircle2 size={17} />تم إكمال إجراء المسافر</div> : null}
+    <div className={styles.cardActions}>
+      <button disabled={pending} type="button" onClick={() => onEdit(passenger)} className={styles.smallButton}><Pencil size={14} />تعديل الرحلة</button>
+      <button disabled={pending} type="button" onClick={() => onVoid(passenger)} className={`${styles.smallButton} ${styles.dangerButton}`}><Trash2 size={14} />إلغاء الإدخال</button>
+    </div>
   </article>;
 }
 
@@ -675,6 +900,20 @@ function countdownText(minutes: number | null) {
 function formatBaghdadDeparture(value: string) {
   const date = new Date(value);
   return `${date.toLocaleDateString("ar-IQ", { timeZone: "Asia/Baghdad", day: "numeric", month: "short" })} · ${date.toLocaleTimeString("ar-IQ", { timeZone: "Asia/Baghdad", hour: "2-digit", minute: "2-digit" })}`;
+}
+
+function toBaghdadDateTimeInput(value: string) {
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Baghdad",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  });
+  const parts = Object.fromEntries(formatter.formatToParts(new Date(value)).map((part) => [part.type, part.value]));
+  return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}`;
 }
 
 function Shell({ children }: { children: React.ReactNode }) {

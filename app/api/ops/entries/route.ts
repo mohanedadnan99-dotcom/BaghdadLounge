@@ -4,7 +4,9 @@ import {
   findPossibleDuplicateEntry,
   getOpenOpsShift,
   listCurrentLoungePassengers,
+  updateOpsPassengerFlight,
   updateOpsPassengerStatus,
+  voidOpsPassengerEntry,
   type OpsPassengerStatus,
   type OpsPaymentType,
 } from "@/lib/lounge-ops-db";
@@ -53,8 +55,28 @@ export async function PATCH(request: Request) {
   try {
     const body = await request.json() as Record<string, unknown>;
     const id = Number(body.id);
-    const status = String(body.status || "") as OpsPassengerStatus;
     if (!Number.isInteger(id) || id <= 0) return Response.json({ message: "رقم المسافر غير صحيح" }, { status: 400 });
+    const action = String(body.action || "status");
+    if (action === "update_flight") {
+      const departureAt = parseBaghdadDeparture(body.departureAt);
+      const passenger = await updateOpsPassengerFlight({
+        id,
+        employeeId: session.employeeId,
+        departureAt,
+        gateNumber: String(body.gateNumber || "").trim().slice(0, 20),
+        reason: String(body.reason || "").trim(),
+      });
+      if (!passenger) return Response.json({ message: "المسافر غير موجود في صالتك" }, { status: 404 });
+      return Response.json({ passenger });
+    }
+    if (action === "void") {
+      const reason = String(body.reason || "").trim();
+      if (reason.length < 3) return Response.json({ message: "سبب إلغاء الإدخال مطلوب" }, { status: 400 });
+      const passenger = await voidOpsPassengerEntry({ id, employeeId: session.employeeId, reason });
+      if (!passenger) return Response.json({ message: "المسافر غير موجود في صالتك أو تم إلغاؤه مسبقاً" }, { status: 404 });
+      return Response.json({ passenger });
+    }
+    const status = String(body.status || "") as OpsPassengerStatus;
     if (!passengerStatuses.includes(status)) return Response.json({ message: "حالة المسافر غير صحيحة" }, { status: 400 });
     const passenger = await updateOpsPassengerStatus({ id, employeeId: session.employeeId, status });
     if (!passenger) return Response.json({ message: "المسافر غير موجود في صالتك" }, { status: 404 });
@@ -145,6 +167,7 @@ export async function POST(request: Request) {
       employeeId: session.employeeId,
       shiftId: Number(shift.id),
       departureAt,
+      gateNumber: String(body.gateNumber || "").trim().slice(0, 20),
       entrySource: body.entrySource === "manual" || body.entrySource === "ticket_image" ? body.entrySource : "scan",
       notes: `${notes}${override.overridden ? ` [تعديل سعر: المعتمد ${Number(pricing.priceIqd).toLocaleString("en-US")}]` : ""}${override.warning ? " [تنبيه سعر غير اعتيادي]" : ""}${body.overrideDuplicate ? " [تم تجاوز تنبيه التكرار]" : ""}`.trim(),
     });
