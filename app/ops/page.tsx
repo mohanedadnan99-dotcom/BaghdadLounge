@@ -18,11 +18,14 @@ import {
   Settings2,
   Trash2,
   Upload,
+  Usb,
   UserCheck,
   Users,
   X,
 } from "lucide-react";
-import { parseIataBcbp } from "@/lib/boarding-pass";
+import { BAGHDAD_AIRLINES } from "@/lib/airlines";
+import { normalizeBoardingPassRaw, parseIataBcbp } from "@/lib/boarding-pass";
+import { useHardwareBarcodeScanner } from "@/lib/use-hardware-barcode-scanner";
 import styles from "./door.module.css";
 
 type User = { employeeId?: number; id?: number; name: string; username: string; role: string; assignedShift: string };
@@ -80,7 +83,13 @@ const paymentLabels = [
   ["voucher", "Voucher / قسيمة"],
   ["complimentary", "مجاني"],
 ];
-const scanFormats = ["qr_code", "pdf417", "aztec", "data_matrix", "code_128"];
+const scanFormats = ["qr_code", "pdf417", "aztec", "data_matrix"] as const;
+const hardwareStateLabels = {
+  ready: "جاهز",
+  receiving: "يقرأ الآن",
+  success: "قراءة ناجحة",
+  error: "راجع القارئ",
+};
 const blankEntry = (): EntryState => ({
   passengerName: "",
   airline: "",
@@ -123,6 +132,9 @@ export default function OpsStaffPage() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const scanTimer = useRef<number | null>(null);
+  const detectorPromise = useRef<Promise<{
+    detect: (source: HTMLVideoElement | HTMLCanvasElement | ImageBitmap) => Promise<Array<{ rawValue: string; format: string }>>;
+  }> | null>(null);
   const alertedPassengerIds = useRef(new Set<number>());
   const alertsArmedRef = useRef(false);
 
@@ -467,31 +479,37 @@ export default function OpsStaffPage() {
     } catch {}
   }
 
-  function detectorAvailable() {
-    return typeof window !== "undefined" && "BarcodeDetector" in window;
-  }
-
   async function makeDetector() {
-    const Detector = (window as typeof window & { BarcodeDetector?: any }).BarcodeDetector;
-    let formats = scanFormats;
-    try {
-      if (Detector.getSupportedFormats) {
-        const supported = await Detector.getSupportedFormats();
-        formats = scanFormats.filter((format) => supported.includes(format));
-      }
-    } catch {}
-    return new Detector(formats.length ? { formats } : undefined);
+    if (!detectorPromise.current) {
+      detectorPromise.current = import("barcode-detector/ponyfill")
+        .then(async ({ BarcodeDetector, prepareZXingModule }) => {
+          await prepareZXingModule({
+            overrides: {
+              locateFile: (path: string, prefix: string) => path.endsWith(".wasm") ? "/zxing_reader.wasm" : `${prefix}${path}`,
+            },
+            fireImmediately: true,
+          });
+          return new BarcodeDetector({ formats: [...scanFormats] });
+        })
+        .catch((error) => {
+          detectorPromise.current = null;
+          throw error;
+        });
+    }
+    return detectorPromise.current;
   }
 
   function fillFromRaw(raw: string) {
-    const parsed = parseIataBcbp(raw);
+    const normalizedRaw = normalizeBoardingPassRaw(raw);
+    const parsed = parseIataBcbp(normalizedRaw);
+    const airline = parsed ? BAGHDAD_AIRLINES.find((item) => item.code === parsed.carrier) : undefined;
     setEntry((current) => ({
       ...current,
-      boardingRaw: raw.trim(),
+      boardingRaw: normalizedRaw,
       amountIqd: current.amountIqd || "40000",
       ...(parsed ? {
         passengerName: parsed.passengerName || current.passengerName,
-        airline: parsed.carrier || current.airline,
+        airline: airline ? `${airline.en} (${airline.code})` : parsed.carrier || current.airline,
         flightNumber: parsed.flightNumber || current.flightNumber,
         origin: parsed.origin || current.origin,
         destination: parsed.destination || current.destination,
@@ -510,15 +528,13 @@ export default function OpsStaffPage() {
   }
 
   async function startCamera() {
-    setScanStatus("");
-    if (!detectorAvailable()) {
-      setScanStatus("هذا المتصفح لا يدعم قارئ الباركود المباشر. استخدم قارئ USB/Bluetooth أو ارفع صورة/PDF.");
-      return;
-    }
+    setScanStatus("جاري تشغيل قارئ PDF417...");
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false });
+      await makeDetector();
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" }, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false });
       streamRef.current = stream;
       setCameraOn(true);
+      setScanStatus("وجّه الكاميرا على الباركود وثبّت البوردنغ داخل الإطار");
       window.setTimeout(async () => {
         if (!videoRef.current) return;
         videoRef.current.srcObject = stream;
@@ -533,13 +549,13 @@ export default function OpsStaffPage() {
               return;
             }
           } catch {}
-          scanTimer.current = window.setTimeout(tick, 350);
+          scanTimer.current = window.setTimeout(tick, 420);
         };
         tick();
       }, 50);
     } catch (error) {
       console.error(error);
-      setScanStatus("تعذر فتح الكاميرا. استخدم رفع صورة/PDF أو قارئ خارجي.");
+      setScanStatus("تعذر تشغيل قارئ الكاميرا. استخدم قارئ USB/Bluetooth أو ارفع صورة واضحة.");
     }
   }
 
@@ -553,8 +569,7 @@ export default function OpsStaffPage() {
     setCameraOn(false);
   }
 
-  async function scanSource(source: ImageBitmapSource) {
-    if (!detectorAvailable()) return false;
+  async function scanSource(source: HTMLVideoElement | HTMLCanvasElement | ImageBitmap) {
     const detector = await makeDetector();
     const hits = await detector.detect(source);
     if (hits?.[0]?.rawValue) {
@@ -565,36 +580,30 @@ export default function OpsStaffPage() {
   }
 
   async function scanImageFile(file: File) {
-    if (!detectorAvailable()) {
-      setScanStatus("هذا الجهاز ما يدعم القراءة التلقائية من الصورة. استخدم القارئ الخارجي أو الإدخال اليدوي.");
-      return;
-    }
+    setScanStatus("جاري فحص الباركود داخل الصورة...");
     try {
       const bitmap = await createImageBitmap(file);
       const ok = await scanSource(bitmap);
       bitmap.close();
       if (!ok) setScanStatus("ما قدرت أقرأ الباركود من الصورة. جرّب صورة أوضح أو PDF الأصلي.");
-    } catch {
-      setScanStatus("تعذر تحليل الصورة.");
+    } catch (error) {
+      console.error(error);
+      setScanStatus("تعذر تحليل الصورة. جرّب صورة أوضح أو امسح بالقارئ الخارجي.");
     }
   }
 
   async function scanPdfFile(file: File) {
-    if (!detectorAvailable()) {
-      setScanStatus("هذا الجهاز ما يدعم فحص الباركود تلقائياً من PDF. استخدم القارئ الخارجي أو صورة واضحة.");
-      return;
-    }
     setScanStatus("جاري قراءة ملف PDF...");
     try {
       const pdfjs = await import("pdfjs-dist");
-      pdfjs.GlobalWorkerOptions.workerSrc = "https://unpkg.com/pdfjs-dist@6.3.289/build/pdf.worker.min.mjs";
+      pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
       const data = new Uint8Array(await file.arrayBuffer());
       const pdf = await pdfjs.getDocument({ data }).promise;
       const pages = Math.min(pdf.numPages, 3);
       for (let pageNumber = 1; pageNumber <= pages; pageNumber += 1) {
         setScanStatus(`جاري فحص صفحة ${pageNumber} من ${pages}...`);
         const page = await pdf.getPage(pageNumber);
-        const viewport = page.getViewport({ scale: 2.2 });
+        const viewport = page.getViewport({ scale: 3 });
         const canvas = document.createElement("canvas");
         canvas.width = Math.ceil(viewport.width);
         canvas.height = Math.ceil(viewport.height);
@@ -618,6 +627,11 @@ export default function OpsStaffPage() {
     if (file.type === "application/pdf") return scanPdfFile(file);
     setScanStatus("نوع الملف غير مدعوم.");
   }
+
+  const hardwareScanner = useHardwareBarcodeScanner({
+    enabled: Boolean(user),
+    onScan: (raw) => acceptScan(raw, "قارئ USB / Bluetooth"),
+  });
 
   const visiblePassengers = useMemo(() => {
     const query = passengerQuery.trim().toLowerCase();
@@ -740,6 +754,16 @@ export default function OpsStaffPage() {
             <div className={styles.scanReady}><ScanLine size={17} />SCAN READY</div>
           </div>
 
+          <section className={styles.hardwareScanner} data-state={hardwareScanner.state} aria-live="polite">
+            <div className={styles.hardwareIcon}><Usb size={24} /></div>
+            <div className={styles.hardwareCopy}>
+              <strong>قارئ USB / Bluetooth مباشر</strong>
+              <span>{hardwareScanner.message}</span>
+              <small>شبّك الجهاز بوضع Keyboard / HID وامسح البوردنغ مباشرة، بدون ضغط أي زر.</small>
+            </div>
+            <span className={styles.hardwareBadge}>{hardwareStateLabels[hardwareScanner.state]}</span>
+          </section>
+
           <section className={styles.scanActions}>
             <button type="button" onClick={cameraOn ? stopCamera : startCamera} className={`${styles.button} ${cameraOn ? styles.primaryButton : styles.secondaryButton}`}><Camera size={18} />{cameraOn ? "إيقاف الكاميرا" : "فتح الكاميرا والمسح"}</button>
             <label className={`${styles.button} ${styles.secondaryButton}`}><Upload size={18} />رفع صورة أو PDF<input type="file" accept="image/*,application/pdf" onChange={(event) => onFile(event.target.files?.[0])} hidden /></label>
@@ -749,9 +773,12 @@ export default function OpsStaffPage() {
           {cameraOn ? <div className={styles.cameraFrame}><video ref={videoRef} muted playsInline /></div> : null}
           {scanStatus || fileName ? <div className={styles.scanStatus}>{fileName ? <strong>الملف: {fileName}</strong> : null}<span>{scanStatus}</span></div> : null}
 
-          <Field label="نص الباركود / Boarding Pass Raw Data">
-            <textarea rows={3} className={styles.input} value={entry.boardingRaw} onChange={(event) => { const raw = event.target.value; setEntry((current) => ({ ...current, boardingRaw: raw })); if (raw.startsWith("M") && raw.length >= 58) fillFromRaw(raw); }} placeholder="ينملأ تلقائياً من الكاميرا أو القارئ أو الملف" />
-          </Field>
+          <details className={styles.rawDetails}>
+            <summary>بيانات الباركود الخام — للدعم والمراجعة فقط</summary>
+            <Field label="Boarding Pass Raw Data">
+              <textarea rows={3} className={styles.input} value={entry.boardingRaw} onChange={(event) => { const raw = event.target.value; setEntry((current) => ({ ...current, boardingRaw: raw })); if (normalizeBoardingPassRaw(raw).startsWith("M") && normalizeBoardingPassRaw(raw).length >= 58) fillFromRaw(raw); }} placeholder="تنملأ تلقائياً من الكاميرا أو القارئ أو الملف" />
+            </Field>
+          </details>
 
           <div className={styles.fieldsGrid}>
             <Field label="اسم المسافر"><input required className={styles.input} value={entry.passengerName} onChange={(event) => setEntry({ ...entry, passengerName: event.target.value })} /></Field>

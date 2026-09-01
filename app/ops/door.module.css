@@ -534,6 +534,79 @@
   white-space: nowrap;
 }
 
+.hardwareScanner {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  margin: 13px 0;
+  padding: 13px;
+  border: 1px solid #334155;
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(15, 32, 54, 0.96), rgba(7, 17, 31, 0.96));
+  transition: border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
+}
+
+.hardwareScanner[data-state="receiving"] {
+  border-color: #60a5fa;
+  box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.12);
+}
+
+.hardwareScanner[data-state="success"] {
+  border-color: #22c55e;
+  background: linear-gradient(135deg, rgba(20, 83, 45, 0.34), rgba(7, 17, 31, 0.98));
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.1);
+}
+
+.hardwareScanner[data-state="error"] {
+  border-color: #f87171;
+  background: linear-gradient(135deg, rgba(127, 29, 29, 0.25), rgba(7, 17, 31, 0.98));
+}
+
+.hardwareIcon {
+  width: 46px;
+  height: 46px;
+  display: grid;
+  place-items: center;
+  border-radius: 13px;
+  color: #f5d89b;
+  background: rgba(200, 166, 106, 0.13);
+  border: 1px solid rgba(200, 166, 106, 0.28);
+}
+
+.hardwareCopy {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.hardwareCopy strong { color: #f8fafc; font-size: 15px; }
+.hardwareCopy span { color: #cbd5e1; font-size: 14px; }
+.hardwareCopy small { color: #94a3b8; font-size: 12px; line-height: 1.55; }
+
+.hardwareBadge {
+  padding: 7px 9px;
+  border-radius: 999px;
+  color: #dbeafe;
+  background: rgba(30, 64, 175, 0.24);
+  border: 1px solid rgba(96, 165, 250, 0.3);
+  font-size: 12px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.hardwareScanner[data-state="success"] .hardwareBadge {
+  color: #dcfce7;
+  background: rgba(22, 101, 52, 0.35);
+  border-color: rgba(74, 222, 128, 0.36);
+}
+
+.hardwareScanner[data-state="error"] .hardwareBadge {
+  color: #fee2e2;
+  background: rgba(127, 29, 29, 0.38);
+  border-color: rgba(248, 113, 113, 0.38);
+}
+
 .scanActions {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -569,6 +642,24 @@
   background: #0b1726;
   color: #cbd5e1;
 }
+
+.rawDetails {
+  margin-bottom: 12px;
+  border: 1px solid #25344a;
+  border-radius: 12px;
+  background: rgba(7, 17, 31, 0.7);
+}
+
+.rawDetails summary {
+  padding: 10px 12px;
+  color: #94a3b8;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.rawDetails[open] summary { border-bottom: 1px solid #25344a; }
+.rawDetails .field { margin: 12px; }
 
 .field {
   display: grid;
@@ -728,6 +819,8 @@ textarea.input { resize: vertical; }
   .headerActions .button { width: 100%; }
   .headerActions .button { flex: 1; }
   .scanActions { grid-template-columns: 1fr; }
+  .hardwareScanner { grid-template-columns: auto minmax(0, 1fr); }
+  .hardwareBadge { grid-column: 1 / -1; width: fit-content; }
   .statRow { grid-template-columns: 1fr; }
   .formHeader { align-items: flex-start; }
   .scanReady { font-size: 11px; }
