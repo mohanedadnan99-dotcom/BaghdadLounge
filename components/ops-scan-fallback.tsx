@@ -5,8 +5,22 @@ import { usePathname } from "next/navigation";
 
 type DetectedBarcode = { rawValue?: string; format?: string };
 type Detector = { detect: (source: HTMLCanvasElement | ImageBitmap) => Promise<DetectedBarcode[]> };
-
 type EnhanceMode = "normal" | "contrast" | "threshold";
+type TicketDetails = {
+  passengerName?: string | null;
+  airlineName?: string | null;
+  airlineCode?: string | null;
+  flightNumber?: string | null;
+  origin?: string | null;
+  destination?: string | null;
+  date?: string | null;
+  time?: string | null;
+  seat?: string | null;
+  pnr?: string | null;
+  ticketNumber?: string | null;
+  confidence?: "high" | "medium" | "low";
+  note?: string | null;
+};
 
 const FORMATS = ["pdf417", "qr_code", "aztec", "data_matrix"] as const;
 const ROTATIONS = [0, 90, 270, 180] as const;
@@ -18,6 +32,11 @@ function rawField() {
     const label = element.closest("label");
     return label?.textContent?.includes("Boarding Pass Raw Data") || element.getAttribute("placeholder")?.includes("القارئ أو الملف");
   }) as HTMLTextAreaElement | undefined;
+}
+
+function fieldByLabel(labelText: string) {
+  const label = Array.from(document.querySelectorAll("label")).find((item) => item.textContent?.includes(labelText));
+  return label?.querySelector("input, textarea, select") as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | null;
 }
 
 function normalizeRaw(value: string) {
@@ -34,11 +53,58 @@ function looksLikeBoardingPass(value: string) {
   return /^M[1-4]/i.test(raw) && raw.length >= 58;
 }
 
-function setNativeTextAreaValue(element: HTMLTextAreaElement, value: string) {
-  const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+function setNativeValue(element: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | null | undefined, value: string) {
+  if (!element || !value) return;
+  const prototype = element instanceof HTMLTextAreaElement
+    ? HTMLTextAreaElement.prototype
+    : element instanceof HTMLSelectElement
+      ? HTMLSelectElement.prototype
+      : HTMLInputElement.prototype;
+  const setter = Object.getOwnPropertyDescriptor(prototype, "value")?.set;
   setter?.call(element, value);
   element.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: value }));
   element.dispatchEvent(new Event("change", { bubbles: true }));
+}
+
+function fillTicketFields(details: TicketDetails) {
+  const airlineCode = String(details.airlineCode || "").trim().toUpperCase();
+  const airlineName = String(details.airlineName || "").trim();
+  const airline = airlineName && airlineCode ? `${airlineName} (${airlineCode})` : airlineName || airlineCode;
+  const date = String(details.date || "").trim();
+  const time = String(details.time || "").trim();
+  const departureAt = /^\d{4}-\d{2}-\d{2}$/.test(date) && /^\d{2}:\d{2}$/.test(time) ? `${date}T${time}` : "";
+
+  setNativeValue(fieldByLabel("اسم المسافر"), String(details.passengerName || "").trim());
+  setNativeValue(fieldByLabel("شركة الطيران"), airline);
+  setNativeValue(fieldByLabel("رقم الرحلة"), String(details.flightNumber || "").trim().toUpperCase());
+  setNativeValue(fieldByLabel("وقت الإقلاع"), departureAt);
+  setNativeValue(fieldByLabel("من"), String(details.origin || "").trim().toUpperCase());
+  setNativeValue(fieldByLabel("إلى"), String(details.destination || "").trim().toUpperCase());
+  setNativeValue(fieldByLabel("المقعد"), String(details.seat || "").trim());
+
+  const notes = fieldByLabel("ملاحظات");
+  if (notes && !String(notes.value || "").trim()) {
+    const metadata = [
+      details.pnr ? `PNR: ${details.pnr}` : "",
+      details.ticketNumber ? `Ticket: ${details.ticketNumber}` : "",
+      details.note ? String(details.note) : "",
+    ].filter(Boolean).join(" · ");
+    if (metadata) setNativeValue(notes, metadata);
+  }
+
+  return Boolean(details.passengerName || details.flightNumber || (details.origin && details.destination));
+}
+
+async function extractFullTicket(file: File, onProgress?: (message: string) => void) {
+  onProgress?.("جاري قراءة محتوى التذكرة بالكامل واستخراج بيانات الرحلة...");
+  const form = new FormData();
+  form.append("ticket", file);
+  const response = await fetch("/api/ops/ticket-extract", { method: "POST", body: form });
+  const payload = await response.json().catch(() => ({})) as { details?: TicketDetails; error?: string };
+  if (!response.ok || !payload.details) throw new Error(payload.error || "full ticket extraction failed");
+  const filled = fillTicketFields(payload.details);
+  if (!filled) throw new Error("no useful ticket details");
+  return payload.details;
 }
 
 async function getDetector() {
@@ -79,17 +145,10 @@ function canvasFromBitmap(bitmap: ImageBitmap, rotation: number, mode: EnhanceMo
   context.imageSmoothingQuality = "high";
   context.translate(canvas.width / 2, canvas.height / 2);
   context.rotate(rotation * Math.PI / 180);
-  context.drawImage(
-    bitmap,
-    -(sourceWidth * scale) / 2,
-    -(sourceHeight * scale) / 2,
-    sourceWidth * scale,
-    sourceHeight * scale,
-  );
+  context.drawImage(bitmap, -(sourceWidth * scale) / 2, -(sourceHeight * scale) / 2, sourceWidth * scale, sourceHeight * scale);
   context.setTransform(1, 0, 0, 1, 0, 0);
 
   if (mode === "normal") return canvas;
-
   const image = context.getImageData(0, 0, canvas.width, canvas.height);
   const pixels = image.data;
   for (let index = 0; index < pixels.length; index += 4) {
@@ -109,7 +168,6 @@ async function detectBoardingPass(bitmap: ImageBitmap, onProgress?: (message: st
   const detector = await getDetector();
   let attempt = 0;
   const total = ROTATIONS.length * MODES.length;
-
   for (const rotation of ROTATIONS) {
     for (const mode of MODES) {
       attempt += 1;
@@ -121,9 +179,7 @@ async function detectBoardingPass(bitmap: ImageBitmap, onProgress?: (message: st
           const raw = normalizeRaw(String(result.rawValue || ""));
           if (looksLikeBoardingPass(raw)) return { raw, format: String(result.format || "PDF417") };
         }
-      } catch {
-        // Continue through the remaining rotation/contrast attempts.
-      }
+      } catch {}
     }
   }
   return null;
@@ -144,7 +200,6 @@ async function scanPdf(file: File, onProgress?: (message: string) => void) {
   const data = new Uint8Array(await file.arrayBuffer());
   const pdf = await pdfjs.getDocument({ data }).promise;
   const pages = Math.min(pdf.numPages, 3);
-
   for (let pageNumber = 1; pageNumber <= pages; pageNumber += 1) {
     onProgress?.(`جاري تجهيز صفحة ${pageNumber} من ${pages}...`);
     const page = await pdf.getPage(pageNumber);
@@ -178,7 +233,23 @@ export default function OpsScanFallback() {
     const showStatus = (message: string, autoClear = false) => {
       if (clearTimer.current !== null) window.clearTimeout(clearTimer.current);
       setStatus(message);
-      if (autoClear) clearTimer.current = window.setTimeout(() => setStatus(""), 4500);
+      if (autoClear) clearTimer.current = window.setTimeout(() => setStatus(""), 5200);
+    };
+
+    const readFullDocument = async (file: File, runId: number, barcodeAlreadyRead: boolean) => {
+      try {
+        const details = await extractFullTicket(file, (message) => runId === activeRun.current && showStatus(message));
+        if (runId !== activeRun.current) return;
+        const review = details.confidence === "low" ? " — راجع البيانات قبل التأكيد" : "";
+        showStatus(`تمت قراءة التذكرة كاملة وتعبئة معلومات الرحلة تلقائياً${review}.`, true);
+        try { navigator.vibrate?.(100); } catch {}
+      } catch (error) {
+        console.error("ops full ticket extraction", error);
+        if (runId !== activeRun.current) return;
+        showStatus(barcodeAlreadyRead
+          ? "تمت قراءة الباركود، لكن تعذر إكمال باقي بيانات التذكرة تلقائياً. راجع وقت الإقلاع يدوياً."
+          : "ما قدرت أستخرج معلومات واضحة من التذكرة. جرّب PDF الأصلي أو صورة أوضح.", true);
+      }
     };
 
     const onChange = (event: Event) => {
@@ -191,34 +262,47 @@ export default function OpsScanFallback() {
       window.setTimeout(async () => {
         if (runId !== activeRun.current) return;
         const fieldBefore = rawField();
-        if (fieldBefore && looksLikeBoardingPass(fieldBefore.value)) return;
+        const primaryRead = Boolean(fieldBefore && looksLikeBoardingPass(fieldBefore.value));
+        if (primaryRead) {
+          if (file.type === "application/pdf") {
+            showStatus("تمت قراءة الباركود. جاري إكمال بيانات الرحلة من ملف PDF بالكامل...");
+            await readFullDocument(file, runId, true);
+          }
+          return;
+        }
 
-        showStatus("القارئ الاحتياطي: جاري تدوير وتحسين الصورة لقراءة PDF417...");
+        showStatus("جاري البحث عن باركود البوردنغ داخل الملف...");
+        let result: { raw: string; format: string } | null = null;
         try {
-          const result = file.type.startsWith("image/")
+          result = file.type.startsWith("image/")
             ? await scanImage(file, (message) => runId === activeRun.current && showStatus(message))
             : await scanPdf(file, (message) => runId === activeRun.current && showStatus(message));
-          if (runId !== activeRun.current) return;
-
-          const field = rawField();
-          if (!field) throw new Error("boarding raw field unavailable");
-          if (looksLikeBoardingPass(field.value)) {
-            showStatus("تمت القراءة من القارئ الأساسي بنجاح.", true);
-            return;
-          }
-          if (!result) {
-            showStatus("ما انقرأ الباركود حتى بعد التدوير وتحسين التباين. استخدم القارئ الخارجي أو صورة أوضح.", true);
-            return;
-          }
-
-          setNativeTextAreaValue(field, result.raw);
-          showStatus(`تمت قراءة البوردنغ وتعبئة المعلومات تلقائياً — ${result.format || "PDF417"}.`, true);
-          try { navigator.vibrate?.(100); } catch {}
         } catch (error) {
           console.error("ops robust barcode fallback", error);
-          if (runId === activeRun.current) showStatus("تعذر تشغيل القارئ الاحتياطي. جرّب القارئ USB/Bluetooth أو صورة أوضح.", true);
         }
-      }, 650);
+        if (runId !== activeRun.current) return;
+
+        const field = rawField();
+        if (!field) return;
+        if (looksLikeBoardingPass(field.value)) {
+          if (file.type === "application/pdf") await readFullDocument(file, runId, true);
+          return;
+        }
+
+        if (result) {
+          setNativeValue(field, result.raw);
+          if (file.type === "application/pdf") {
+            showStatus(`تمت قراءة ${result.format || "PDF417"}. جاري إكمال تفاصيل الرحلة من التذكرة...`);
+            await readFullDocument(file, runId, true);
+          } else {
+            showStatus(`تمت قراءة البوردنغ وتعبئة المعلومات تلقائياً — ${result.format || "PDF417"}.`, true);
+          }
+          return;
+        }
+
+        showStatus("ماكو باركود بوردنغ مقروء؛ جاري قراءة نص التذكرة والرحلة بالكامل...");
+        await readFullDocument(file, runId, false);
+      }, 700);
     };
 
     document.addEventListener("change", onChange, true);
