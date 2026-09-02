@@ -1,78 +1,256 @@
 "use client";
-import { useEffect,useState } from "react";
+
+import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 
-declare global{interface Window{ZXingBrowser?:any}}
+type DetectedBarcode = { rawValue?: string; format?: string };
+type Detector = { detect: (source: HTMLCanvasElement | ImageBitmap) => Promise<DetectedBarcode[]> };
 
-function setNative(el:HTMLInputElement|HTMLTextAreaElement|null,value:string){
-  if(!el)return;
-  const proto=el instanceof HTMLTextAreaElement?HTMLTextAreaElement.prototype:HTMLInputElement.prototype;
-  Object.getOwnPropertyDescriptor(proto,"value")?.set?.call(el,value);
-  el.dispatchEvent(new Event("input",{bubbles:true}));
-  el.dispatchEvent(new Event("change",{bubbles:true}));
-}
-function rawField(){
-  const labels=Array.from(document.querySelectorAll("label"));
-  return labels.find(l=>l.textContent?.includes("نص الباركود"))?.querySelector("textarea") as HTMLTextAreaElement|null;
-}
-async function loadZxing(){
-  if(window.ZXingBrowser)return window.ZXingBrowser;
-  await new Promise<void>((resolve,reject)=>{
-    const existing=document.querySelector('script[data-ops-zxing="1"]') as HTMLScriptElement|null;
-    if(existing){existing.addEventListener("load",()=>resolve(),{once:true});existing.addEventListener("error",()=>reject(new Error("ZXing load failed")),{once:true});return}
-    const s=document.createElement("script");s.src="https://unpkg.com/@zxing/browser@0.2.1/umd/zxing-browser.min.js";s.async=true;s.dataset.opsZxing="1";s.onload=()=>resolve();s.onerror=()=>reject(new Error("ZXing load failed"));document.head.appendChild(s);
-  });
-  if(!window.ZXingBrowser)throw new Error("ZXing unavailable");
-  return window.ZXingBrowser;
+type EnhanceMode = "normal" | "contrast" | "threshold";
+
+const FORMATS = ["pdf417", "qr_code", "aztec", "data_matrix"] as const;
+const ROTATIONS = [0, 90, 270, 180] as const;
+const MODES: EnhanceMode[] = ["normal", "contrast", "threshold"];
+let detectorPromise: Promise<Detector> | null = null;
+
+function rawField() {
+  return Array.from(document.querySelectorAll("textarea")).find((element) => {
+    const label = element.closest("label");
+    return label?.textContent?.includes("Boarding Pass Raw Data") || element.getAttribute("placeholder")?.includes("القارئ أو الملف");
+  }) as HTMLTextAreaElement | undefined;
 }
 
-export default function OpsScanFallback(){
-  const pathname=usePathname();
-  const [status,setStatus]=useState("");
-  useEffect(()=>{
-    if(pathname!=="/ops")return;
-    const onChange=async(ev:Event)=>{
-      const input=ev.target as HTMLInputElement;
-      if(!(input instanceof HTMLInputElement)||input.type!=="file"||!input.files?.[0])return;
-      if("BarcodeDetector" in window)return;
-      const file=input.files[0];
-      if(!file.type.startsWith("image/")&&file.type!=="application/pdf")return;
-      ev.stopImmediatePropagation();
-      setStatus("جاري قراءة الباركود بالقارئ الاحتياطي...");
-      try{
-        const ZX=await loadZxing();
-        const reader=new ZX.BrowserMultiFormatReader();
-        let text="";
-        if(file.type.startsWith("image/")){
-          const url=URL.createObjectURL(file);
-          try{const result=await reader.decodeFromImageUrl(url);text=String(result?.getText?.()||result?.text||"")}finally{URL.revokeObjectURL(url)}
-        }else{
-          const pdfjs=await import("pdfjs-dist");
-          pdfjs.GlobalWorkerOptions.workerSrc="https://unpkg.com/pdfjs-dist@6.3.289/build/pdf.worker.min.mjs";
-          const pdf=await pdfjs.getDocument({data:new Uint8Array(await file.arrayBuffer())}).promise;
-          const pages=Math.min(pdf.numPages,3);
-          for(let i=1;i<=pages&&!text;i++){
-            setStatus(`جاري فحص صفحة ${i} من ${pages} بالقارئ الاحتياطي...`);
-            const page=await pdf.getPage(i);const viewport=page.getViewport({scale:2.4});
-            const canvas=document.createElement("canvas");canvas.width=Math.ceil(viewport.width);canvas.height=Math.ceil(viewport.height);
-            const ctx=canvas.getContext("2d");if(!ctx)continue;
-            await page.render({canvasContext:ctx,viewport,canvas}).promise;
-            try{const result=await reader.decodeFromCanvas(canvas);text=String(result?.getText?.()||result?.text||"")}catch{}
-          }
+function normalizeRaw(value: string) {
+  const singleLine = String(value || "")
+    .replace(/[\r\n]/g, "")
+    .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, "")
+    .trimEnd();
+  const start = singleLine.search(/M[1-4]/i);
+  return (start >= 0 ? singleLine.slice(start) : singleLine).trimEnd();
+}
+
+function looksLikeBoardingPass(value: string) {
+  const raw = normalizeRaw(value);
+  return /^M[1-4]/i.test(raw) && raw.length >= 58;
+}
+
+function setNativeTextAreaValue(element: HTMLTextAreaElement, value: string) {
+  const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+  setter?.call(element, value);
+  element.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: value }));
+  element.dispatchEvent(new Event("change", { bubbles: true }));
+}
+
+async function getDetector() {
+  if (!detectorPromise) {
+    detectorPromise = import("barcode-detector/ponyfill")
+      .then(async ({ BarcodeDetector, prepareZXingModule }) => {
+        await prepareZXingModule({
+          overrides: {
+            locateFile: (path: string, prefix: string) => path.endsWith(".wasm") ? "/zxing_reader.wasm" : `${prefix}${path}`,
+          },
+          fireImmediately: true,
+        });
+        return new BarcodeDetector({ formats: [...FORMATS] }) as Detector;
+      })
+      .catch((error) => {
+        detectorPromise = null;
+        throw error;
+      });
+  }
+  return detectorPromise;
+}
+
+function canvasFromBitmap(bitmap: ImageBitmap, rotation: number, mode: EnhanceMode) {
+  const sourceWidth = bitmap.width;
+  const sourceHeight = bitmap.height;
+  const longestSide = Math.max(sourceWidth, sourceHeight);
+  const scale = longestSide < 2400
+    ? Math.min(2, 2400 / Math.max(1, longestSide))
+    : Math.min(1, 3000 / longestSide);
+  const rotated = rotation % 180 !== 0;
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round((rotated ? sourceHeight : sourceWidth) * scale));
+  canvas.height = Math.max(1, Math.round((rotated ? sourceWidth : sourceHeight) * scale));
+  const context = canvas.getContext("2d", { willReadFrequently: mode !== "normal" });
+  if (!context) return canvas;
+
+  context.imageSmoothingEnabled = true;
+  context.imageSmoothingQuality = "high";
+  context.translate(canvas.width / 2, canvas.height / 2);
+  context.rotate(rotation * Math.PI / 180);
+  context.drawImage(
+    bitmap,
+    -(sourceWidth * scale) / 2,
+    -(sourceHeight * scale) / 2,
+    sourceWidth * scale,
+    sourceHeight * scale,
+  );
+  context.setTransform(1, 0, 0, 1, 0, 0);
+
+  if (mode === "normal") return canvas;
+
+  const image = context.getImageData(0, 0, canvas.width, canvas.height);
+  const pixels = image.data;
+  for (let index = 0; index < pixels.length; index += 4) {
+    const gray = Math.round((pixels[index] * 0.299) + (pixels[index + 1] * 0.587) + (pixels[index + 2] * 0.114));
+    let value = gray;
+    if (mode === "contrast") value = Math.max(0, Math.min(255, Math.round(((gray - 128) * 1.7) + 128)));
+    if (mode === "threshold") value = gray < 182 ? 0 : 255;
+    pixels[index] = value;
+    pixels[index + 1] = value;
+    pixels[index + 2] = value;
+  }
+  context.putImageData(image, 0, 0);
+  return canvas;
+}
+
+async function detectBoardingPass(bitmap: ImageBitmap, onProgress?: (message: string) => void) {
+  const detector = await getDetector();
+  let attempt = 0;
+  const total = ROTATIONS.length * MODES.length;
+
+  for (const rotation of ROTATIONS) {
+    for (const mode of MODES) {
+      attempt += 1;
+      onProgress?.(`جاري تحسين وقراءة الباركود (${attempt}/${total})...`);
+      const canvas = canvasFromBitmap(bitmap, rotation, mode);
+      try {
+        const results = await detector.detect(canvas);
+        for (const result of results || []) {
+          const raw = normalizeRaw(String(result.rawValue || ""));
+          if (looksLikeBoardingPass(raw)) return { raw, format: String(result.format || "PDF417") };
         }
-        if(!text)throw new Error("not found");
-        const field=rawField();if(!field)throw new Error("field unavailable");
-        setNative(field,text.trim());
-        setStatus("تمت قراءة الباركود وتعبئة معلومات المسافر بنجاح.");
-        try{navigator.vibrate?.(100)}catch{}
-      }catch(err){
-        console.error("ops fallback scan",err);
-        setStatus("ما قدرت أقرأ الباركود من الملف. جرّب صورة أوضح، PDF الأصلي، أو القارئ الخارجي.");
+      } catch {
+        // Continue through the remaining rotation/contrast attempts.
       }
+    }
+  }
+  return null;
+}
+
+async function scanImage(file: File, onProgress?: (message: string) => void) {
+  const bitmap = await createImageBitmap(file);
+  try {
+    return await detectBoardingPass(bitmap, onProgress);
+  } finally {
+    bitmap.close();
+  }
+}
+
+async function scanPdf(file: File, onProgress?: (message: string) => void) {
+  const pdfjs = await import("pdfjs-dist");
+  pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
+  const data = new Uint8Array(await file.arrayBuffer());
+  const pdf = await pdfjs.getDocument({ data }).promise;
+  const pages = Math.min(pdf.numPages, 3);
+
+  for (let pageNumber = 1; pageNumber <= pages; pageNumber += 1) {
+    onProgress?.(`جاري تجهيز صفحة ${pageNumber} من ${pages}...`);
+    const page = await pdf.getPage(pageNumber);
+    const viewport = page.getViewport({ scale: 3 });
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.ceil(viewport.width);
+    canvas.height = Math.ceil(viewport.height);
+    const context = canvas.getContext("2d");
+    if (!context) continue;
+    await page.render({ canvasContext: context, viewport, canvas }).promise;
+    const bitmap = await createImageBitmap(canvas);
+    try {
+      const result = await detectBoardingPass(bitmap, (message) => onProgress?.(`صفحة ${pageNumber}: ${message}`));
+      if (result) return result;
+    } finally {
+      bitmap.close();
+    }
+  }
+  return null;
+}
+
+export default function OpsScanFallback() {
+  const pathname = usePathname();
+  const [status, setStatus] = useState("");
+  const activeRun = useRef(0);
+  const clearTimer = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (pathname !== "/ops") return;
+
+    const showStatus = (message: string, autoClear = false) => {
+      if (clearTimer.current !== null) window.clearTimeout(clearTimer.current);
+      setStatus(message);
+      if (autoClear) clearTimer.current = window.setTimeout(() => setStatus(""), 4500);
     };
-    document.addEventListener("change",onChange,true);
-    return()=>document.removeEventListener("change",onChange,true);
-  },[pathname]);
-  if(pathname!=="/ops"||!status)return null;
-  return <div dir="rtl" style={{position:"fixed",right:14,bottom:14,zIndex:120,maxWidth:420,background:"#0d1829",color:"#f8fafc",border:"1px solid #c8a66a",borderRadius:14,padding:"11px 13px",boxShadow:"0 12px 30px rgba(0,0,0,.4)",fontWeight:800}}>{status}</div>;
+
+    const onChange = (event: Event) => {
+      const input = event.target;
+      if (!(input instanceof HTMLInputElement) || input.type !== "file" || !input.files?.[0]) return;
+      const file = input.files[0];
+      if (!file.type.startsWith("image/") && file.type !== "application/pdf") return;
+      const runId = ++activeRun.current;
+
+      window.setTimeout(async () => {
+        if (runId !== activeRun.current) return;
+        const fieldBefore = rawField();
+        if (fieldBefore && looksLikeBoardingPass(fieldBefore.value)) return;
+
+        showStatus("القارئ الاحتياطي: جاري تدوير وتحسين الصورة لقراءة PDF417...");
+        try {
+          const result = file.type.startsWith("image/")
+            ? await scanImage(file, (message) => runId === activeRun.current && showStatus(message))
+            : await scanPdf(file, (message) => runId === activeRun.current && showStatus(message));
+          if (runId !== activeRun.current) return;
+
+          const field = rawField();
+          if (!field) throw new Error("boarding raw field unavailable");
+          if (looksLikeBoardingPass(field.value)) {
+            showStatus("تمت القراءة من القارئ الأساسي بنجاح.", true);
+            return;
+          }
+          if (!result) {
+            showStatus("ما انقرأ الباركود حتى بعد التدوير وتحسين التباين. استخدم القارئ الخارجي أو صورة أوضح.", true);
+            return;
+          }
+
+          setNativeTextAreaValue(field, result.raw);
+          showStatus(`تمت قراءة البوردنغ وتعبئة المعلومات تلقائياً — ${result.format || "PDF417"}.`, true);
+          try { navigator.vibrate?.(100); } catch {}
+        } catch (error) {
+          console.error("ops robust barcode fallback", error);
+          if (runId === activeRun.current) showStatus("تعذر تشغيل القارئ الاحتياطي. جرّب القارئ USB/Bluetooth أو صورة أوضح.", true);
+        }
+      }, 650);
+    };
+
+    document.addEventListener("change", onChange, true);
+    return () => {
+      document.removeEventListener("change", onChange, true);
+      activeRun.current += 1;
+      if (clearTimer.current !== null) window.clearTimeout(clearTimer.current);
+    };
+  }, [pathname]);
+
+  if (pathname !== "/ops" || !status) return null;
+  return (
+    <div
+      dir="rtl"
+      role="status"
+      aria-live="polite"
+      style={{
+        position: "fixed",
+        right: 14,
+        bottom: 14,
+        zIndex: 120,
+        maxWidth: 440,
+        background: "#0d1829",
+        color: "#f8fafc",
+        border: "1px solid #c8a66a",
+        borderRadius: 14,
+        padding: "11px 13px",
+        boxShadow: "0 12px 30px rgba(0,0,0,.4)",
+        fontWeight: 800,
+      }}
+    >
+      {status}
+    </div>
+  );
 }
