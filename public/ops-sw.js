@@ -1,7 +1,7 @@
 /* Baghdad Lounge door app shell. Passenger data stays in IndexedDB; API
    responses are deliberately never written to the HTTP cache. */
-const CACHE_NAME = "baghdad-lounge-ops-v3";
-const OFFLINE_ASSETS = ["/zxing_reader.wasm", "/pdf.worker.min.mjs"];
+const CACHE_NAME = "baghdad-lounge-ops-v4";
+const OFFLINE_ASSETS = ["/zxing_reader.wasm", "/pdf.worker.min.mjs", "/ops-build-version.txt"];
 
 async function cacheResponse(cache, url) {
   try {
@@ -53,7 +53,7 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(
       fetch(request, { cache: "no-store" })
         .then((response) => {
-          if (url.pathname === "/ops" && response.ok) {
+          if (response.ok) {
             const copy = response.clone();
             void caches.open(CACHE_NAME).then((cache) => cache.put("/ops", copy));
           }
@@ -64,15 +64,19 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  if (url.pathname.startsWith("/_next/static/") || url.pathname.startsWith("/zxing_") || url.pathname.endsWith(".wasm") || url.pathname.endsWith(".mjs")) {
+  // Next/Turbopack chunk URLs may remain stable across deployments. Always
+  // prefer the network when it exists, then fall back to the v4 cache offline.
+  if (url.pathname.startsWith("/_next/static/") || url.pathname.startsWith("/zxing_") || url.pathname.endsWith(".wasm") || url.pathname.endsWith(".mjs") || url.pathname === "/ops-build-version.txt") {
     event.respondWith(
-      caches.match(request).then((cached) => cached || fetch(request).then((response) => {
-        if (response.ok) {
-          const copy = response.clone();
-          void caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
-        }
-        return response;
-      })),
+      fetch(request, { cache: "no-store" })
+        .then((response) => {
+          if (response.ok) {
+            const copy = response.clone();
+            void caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+          }
+          return response;
+        })
+        .catch(async () => (await caches.match(request)) || Response.error()),
     );
   }
 });
