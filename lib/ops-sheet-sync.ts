@@ -1,5 +1,35 @@
 import { neon } from "@neondatabase/serverless";
 
+const OPS_SPREADSHEET_ID = "1MDNnsv9akz2y9ADL0Dmi285hjjlG5mv9HSzqP3O8sHQ";
+const OPS_SHEET_NAME = "سجل العمليات";
+
+export function getOpsSheetSyncConfiguration() {
+  const webhook = String(process.env.OPS_SHEETS_WEBHOOK_URL || "").trim();
+  const token = String(process.env.OPS_SHEETS_WEBHOOK_TOKEN || "").trim();
+  let validWebhook = false;
+
+  try {
+    validWebhook = new URL(webhook).protocol === "https:";
+  } catch {
+    validWebhook = false;
+  }
+
+  return {
+    ready: validWebhook && Boolean(token),
+    webhookConfigured: Boolean(webhook),
+    tokenConfigured: Boolean(token),
+    spreadsheetId: OPS_SPREADSHEET_ID,
+    sheetName: OPS_SHEET_NAME,
+    message: !validWebhook
+      ? webhook
+        ? "رابط Google Sheet غير صالح؛ يجب أن يبدأ بـ https://"
+        : "ربط Google Sheet غير مهيأ في إعدادات النظام"
+      : token
+        ? "ربط Google Sheet مهيأ"
+        : "رمز حماية Google Sheet غير مهيأ في إعدادات النظام",
+  };
+}
+
 function connectionString() {
   const value = process.env.DATABASE_URL || process.env.POSTGRES_URL || process.env.NEON_DATABASE_URL;
   if (!value) throw new Error("DATABASE_URL is not configured");
@@ -45,17 +75,20 @@ export async function syncOpsEntryToGoogleSheet(entryId: number) {
 
   const webhook = String(process.env.OPS_SHEETS_WEBHOOK_URL || "").trim();
   const token = String(process.env.OPS_SHEETS_WEBHOOK_TOKEN || "").trim();
+  const configuration = getOpsSheetSyncConfiguration();
   const db = sql();
-  if (!webhook) {
-    await db`UPDATE ops_entries SET sheet_sync_status='pending',sheet_sync_error='OPS_SHEETS_WEBHOOK_URL غير مهيأ' WHERE id=${entryId}`;
-    return { status: "pending" as const };
+  if (!configuration.ready) {
+    console.warn("ops sheet sync skipped", { entryId, reason: "sheet_sync_not_configured" });
+    await db`UPDATE ops_entries SET sheet_sync_status='pending',sheet_sync_error=${configuration.message} WHERE id=${entryId}`;
+    return { status: "pending" as const, message: configuration.message };
   }
 
   try {
     const created = new Date(String(row.created_at));
     const payload = {
-      spreadsheetId: "1MDNnsv9akz2y9ADL0Dmi285hjjlG5mv9HSzqP3O8sHQ",
-      sheetName: "سجل العمليات",
+      spreadsheetId: OPS_SPREADSHEET_ID,
+      sheetName: OPS_SHEET_NAME,
+      token,
       row: [
         String(row.reference || ""),
         created.toLocaleDateString("en-CA", { timeZone: "Asia/Baghdad" }),
@@ -81,15 +114,24 @@ export async function syncOpsEntryToGoogleSheet(entryId: number) {
     };
     const res = await fetch(webhook, {
       method: "POST",
-      headers: { "Content-Type": "application/json", ...(token ? { "X-Ops-Sync-Token": token } : {}) },
+      headers: {
+        "Content-Type": "application/json",
+        "Idempotency-Key": String(row.reference || entryId),
+        ...(token ? { "X-Ops-Sync-Token": token } : {}),
+      },
       body: JSON.stringify(payload),
       cache: "no-store",
+      signal: AbortSignal.timeout(15_000),
     });
     if (!res.ok) throw new Error(`Google Sheet sync HTTP ${res.status}`);
+    const responseBody = await res.json().catch(() => null) as { ok?: boolean; error?: string } | null;
+    if (responseBody?.ok === false) throw new Error(responseBody.error || "Google Sheet رفض المزامنة");
     await db`UPDATE ops_entries SET sheet_sync_status='synced',sheet_sync_attempts=sheet_sync_attempts+1,sheet_sync_error='',sheet_synced_at=NOW() WHERE id=${entryId}`;
+    console.info("ops sheet sync completed", { entryId });
     return { status: "synced" as const };
   } catch (error) {
     const message = error instanceof Error ? error.message : "تعذر مزامنة Google Sheet";
+    console.error("ops sheet sync failed", { entryId, message });
     await db`UPDATE ops_entries SET sheet_sync_status='failed',sheet_sync_attempts=sheet_sync_attempts+1,sheet_sync_error=${message} WHERE id=${entryId}`;
     return { status: "failed" as const, message };
   }
