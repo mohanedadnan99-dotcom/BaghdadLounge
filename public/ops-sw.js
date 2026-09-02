@@ -1,6 +1,6 @@
 /* Baghdad Lounge door app shell. Passenger data stays in IndexedDB; API
    responses are deliberately never written to the HTTP cache. */
-const CACHE_NAME = "baghdad-lounge-ops-v4";
+const CACHE_NAME = "baghdad-lounge-ops-v5";
 const OFFLINE_ASSETS = ["/zxing_reader.wasm", "/pdf.worker.min.mjs", "/ops-build-version.txt"];
 
 async function cacheResponse(cache, url) {
@@ -65,7 +65,7 @@ self.addEventListener("fetch", (event) => {
   }
 
   // Next/Turbopack chunk URLs may remain stable across deployments. Always
-  // prefer the network when it exists, then fall back to the v4 cache offline.
+  // prefer the network when it exists, then fall back to the v5 cache offline.
   if (url.pathname.startsWith("/_next/static/") || url.pathname.startsWith("/zxing_") || url.pathname.endsWith(".wasm") || url.pathname.endsWith(".mjs") || url.pathname === "/ops-build-version.txt") {
     event.respondWith(
       fetch(request, { cache: "no-store" })
