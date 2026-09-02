@@ -2,8 +2,8 @@
 
 import { useEffect } from "react";
 
-const REFRESH_KEY = "baghdad-ops-sw-refresh-v4";
-const OPS_SW_URL = "/ops-sw.js?v=4";
+const REFRESH_KEY = "baghdad-ops-sw-refresh-v5";
+const OPS_SW_URL = "/ops-sw.js?v=5";
 
 export default function OpsOfflineBootstrap() {
   useEffect(() => {
@@ -26,9 +26,9 @@ export default function OpsOfflineBootstrap() {
       if (cancelled) return;
       await registration.update();
 
-      // Warm the scanner/PDF chunks after the v4 worker controls the page.
-      // The worker uses network-first for these assets so an old iPhone cache
-      // cannot keep an earlier ticket reader after a deployment.
+      // Warm scanner/PDF chunks after the v5 worker controls the page. The
+      // worker is network-first for app chunks so the diagnostic UI and reader
+      // cannot remain stuck on an older iPhone/Safari cache after deployment.
       const warmScanner = () => {
         if (cancelled) return;
         void Promise.allSettled([
