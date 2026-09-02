@@ -1,6 +1,6 @@
 /* Baghdad Lounge door app shell. Passenger data stays in IndexedDB; API
    responses are deliberately never written to the HTTP cache. */
-const CACHE_NAME = "baghdad-lounge-ops-v2";
+const CACHE_NAME = "baghdad-lounge-ops-v3";
 const OFFLINE_ASSETS = ["/zxing_reader.wasm", "/pdf.worker.min.mjs"];
 
 async function cacheResponse(cache, url) {
@@ -51,7 +51,7 @@ self.addEventListener("fetch", (event) => {
 
   if (request.mode === "navigate" && url.pathname === "/ops") {
     event.respondWith(
-      fetch(request)
+      fetch(request, { cache: "no-store" })
         .then((response) => {
           if (url.pathname === "/ops" && response.ok) {
             const copy = response.clone();
