@@ -52,11 +52,22 @@ export async function POST(request: Request) {
             attachment,
             {
               type: "input_text",
-              text: `You are reading an airline travel document for a Baghdad airport lounge operations desk. The file can be a full e-ticket, itinerary receipt, booking confirmation, boarding pass, or a multi-page PDF. Today is ${today}.
+              text: `You are reading an airline travel document for a Baghdad International Airport lounge operations desk. The file can be a full e-ticket, itinerary receipt, booking confirmation, boarding pass, or multi-page PDF. Today is ${today}.
 
-Extract the travel segment relevant to Baghdad International Airport (BGW). If there are several segments, choose the segment that departs BGW or arrives BGW and is the operationally relevant flight for the passenger; prefer the nearest upcoming/active segment when dates make that clear. Never use ticket issue date, booking creation date, payment date, or document print date as the flight date. Prefer scheduled departure time over boarding time. If only boarding time is visible, you may return it but explain that in note. Do not invent missing values.
+Your job is to extract the ACTUAL FLIGHT LEG that directly touches Baghdad International Airport (BGW), because lounge staff need the flight that physically departs from or arrives at Baghdad — not merely the passenger's final itinerary destination.
 
-Return passenger name, airline name and code, flight number, origin airport IATA code, destination airport IATA code, flight date YYYY-MM-DD, local scheduled time HH:MM in 24-hour format, seat, PNR/booking reference, ticket number, confidence, and a short note only when something needs review. Flight number should include airline code when clearly shown (example TK303). Airport codes should be three-letter IATA codes when visible or unambiguous.`,
+Rules:
+1. If the itinerary contains multiple legs, choose the individual leg whose origin is BGW or whose destination is BGW.
+2. Do NOT collapse a connection into the overall itinerary. Example: if the document headline says BGW → OTP but the legs are BGW → IST on TK0303 and IST → OTP on TK1043, return the BGW → IST leg and TK0303.
+3. A historical/past ticket is still valid input. Extract its actual flight date even when it is earlier than today. Never replace a past flight date with transaction date, ticket issue date, booking creation date, payment date, email date, print date, or today's date.
+4. Prefer scheduled departure time for a departure from BGW. For an arrival to BGW, return the scheduled local arrival time when that is the operationally relevant time shown. If only boarding time is visible, return it only when no scheduled flight time exists and explain this in note.
+5. Preserve the airline flight designator as printed when clear, including meaningful leading zeros (for example TK0303 rather than inventing another flight number).
+6. Passenger name comes from the passenger/ticket holder field, not the greeting if a more formal passenger field is available.
+7. Reservation code / PNR and ticket number may appear on later pages. Search the whole document.
+8. Seat may legitimately be absent on an e-ticket before check-in; return null instead of inventing it.
+9. Do not infer a boarding gate unless it is explicitly shown. Do not invent missing values.
+
+Return passenger name, airline name and code, flight number, origin airport IATA code, destination airport IATA code, flight date YYYY-MM-DD, relevant local scheduled time HH:MM in 24-hour format, seat, PNR/booking reference, ticket number, confidence, and a short note only when something genuinely needs staff review. Airport codes should be three-letter IATA codes when visible or unambiguous.`,
             },
           ],
         }],
