@@ -34,8 +34,12 @@ function rawField() {
   }) as HTMLTextAreaElement | undefined;
 }
 
-function fieldByLabel(labelText: string) {
-  const label = Array.from(document.querySelectorAll("label")).find((item) => item.textContent?.includes(labelText));
+function fieldByExactLabel(labelText: string) {
+  const normalizedTarget = labelText.replace(/\s+/g, " ").trim();
+  const label = Array.from(document.querySelectorAll("label")).find((item) => {
+    const ownLabel = item.querySelector(":scope > span")?.textContent || "";
+    return ownLabel.replace(/\s+/g, " ").trim() === normalizedTarget;
+  });
   return label?.querySelector("input, textarea, select") as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | null;
 }
 
@@ -53,20 +57,33 @@ function looksLikeBoardingPass(value: string) {
   return /^M[1-4]/i.test(raw) && raw.length >= 58;
 }
 
-function setNativeValue(element: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | null | undefined, value: string) {
-  if (!element || !value) return;
+function nativeSetter(element: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement) {
   const prototype = element instanceof HTMLTextAreaElement
     ? HTMLTextAreaElement.prototype
     : element instanceof HTMLSelectElement
       ? HTMLSelectElement.prototype
       : HTMLInputElement.prototype;
-  const setter = Object.getOwnPropertyDescriptor(prototype, "value")?.set;
-  setter?.call(element, value);
-  element.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: value }));
-  element.dispatchEvent(new Event("change", { bubbles: true }));
+  return Object.getOwnPropertyDescriptor(prototype, "value")?.set;
 }
 
-function fillTicketFields(details: TicketDetails) {
+async function settleReact() {
+  await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+}
+
+async function setReactValue(
+  element: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | null | undefined,
+  value: string,
+  allowEmpty = false,
+) {
+  if (!element || (!allowEmpty && !value)) return false;
+  nativeSetter(element)?.call(element, value);
+  element.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: value }));
+  element.dispatchEvent(new Event("change", { bubbles: true }));
+  await settleReact();
+  return true;
+}
+
+async function fillTicketFields(details: TicketDetails) {
   const airlineCode = String(details.airlineCode || "").trim().toUpperCase();
   const airlineName = String(details.airlineName || "").trim();
   const airline = airlineName && airlineCode ? `${airlineName} (${airlineCode})` : airlineName || airlineCode;
@@ -74,35 +91,49 @@ function fillTicketFields(details: TicketDetails) {
   const time = String(details.time || "").trim();
   const departureAt = /^\d{4}-\d{2}-\d{2}$/.test(date) && /^\d{2}:\d{2}$/.test(time) ? `${date}T${time}` : "";
 
-  setNativeValue(fieldByLabel("اسم المسافر"), String(details.passengerName || "").trim());
-  setNativeValue(fieldByLabel("شركة الطيران"), airline);
-  setNativeValue(fieldByLabel("رقم الرحلة"), String(details.flightNumber || "").trim().toUpperCase());
-  setNativeValue(fieldByLabel("وقت الإقلاع"), departureAt);
-  setNativeValue(fieldByLabel("من"), String(details.origin || "").trim().toUpperCase());
-  setNativeValue(fieldByLabel("إلى"), String(details.destination || "").trim().toUpperCase());
-  setNativeValue(fieldByLabel("المقعد"), String(details.seat || "").trim());
+  // A full e-ticket often contains unrelated QR codes (booking/manage links).
+  // Clear those short values so they are not mistaken for IATA boarding data.
+  const raw = rawField();
+  if (raw && raw.value && !looksLikeBoardingPass(raw.value)) await setReactValue(raw, "", true);
 
-  const notes = fieldByLabel("ملاحظات");
-  if (notes && !String(notes.value || "").trim()) {
-    const metadata = [
-      details.pnr ? `PNR: ${details.pnr}` : "",
-      details.ticketNumber ? `Ticket: ${details.ticketNumber}` : "",
-      details.note ? String(details.note) : "",
-    ].filter(Boolean).join(" · ");
-    if (metadata) setNativeValue(notes, metadata);
+  // The Ops form uses controlled React inputs whose onChange handlers update the
+  // whole entry object. Update one field per task so each React commit completes
+  // before the next field, otherwise successive synthetic events overwrite one another.
+  const values: Array<[string, string]> = [
+    ["اسم المسافر", String(details.passengerName || "").trim()],
+    ["شركة الطيران", airline],
+    ["رقم الرحلة", String(details.flightNumber || "").trim().toUpperCase()],
+    ["وقت الإقلاع — بتوقيت بغداد", departureAt],
+    ["من", String(details.origin || "").trim().toUpperCase()],
+    ["إلى", String(details.destination || "").trim().toUpperCase()],
+    ["المقعد", String(details.seat || "").trim()],
+  ];
+
+  let populated = 0;
+  for (const [label, value] of values) {
+    if (!value) continue;
+    if (await setReactValue(fieldByExactLabel(label), value)) populated += 1;
   }
 
-  return Boolean(details.passengerName || details.flightNumber || (details.origin && details.destination));
+  const metadata = [
+    details.pnr ? `PNR: ${String(details.pnr).trim()}` : "",
+    details.ticketNumber ? `Ticket: ${String(details.ticketNumber).trim()}` : "",
+    details.note ? String(details.note).trim() : "",
+  ].filter(Boolean).join(" · ");
+  const notes = fieldByExactLabel("ملاحظات");
+  if (metadata && notes && !String(notes.value || "").trim()) await setReactValue(notes, metadata);
+
+  return populated > 0;
 }
 
 async function extractFullTicket(file: File, onProgress?: (message: string) => void) {
   onProgress?.("جاري قراءة محتوى التذكرة بالكامل واستخراج بيانات الرحلة...");
   const form = new FormData();
   form.append("ticket", file);
-  const response = await fetch("/api/ops/ticket-extract", { method: "POST", body: form });
+  const response = await fetch("/api/ops/ticket-extract", { method: "POST", body: form, cache: "no-store" });
   const payload = await response.json().catch(() => ({})) as { details?: TicketDetails; error?: string };
   if (!response.ok || !payload.details) throw new Error(payload.error || "full ticket extraction failed");
-  const filled = fillTicketFields(payload.details);
+  const filled = await fillTicketFields(payload.details);
   if (!filled) throw new Error("no useful ticket details");
   return payload.details;
 }
@@ -131,9 +162,7 @@ function canvasFromBitmap(bitmap: ImageBitmap, rotation: number, mode: EnhanceMo
   const sourceWidth = bitmap.width;
   const sourceHeight = bitmap.height;
   const longestSide = Math.max(sourceWidth, sourceHeight);
-  const scale = longestSide < 2400
-    ? Math.min(2, 2400 / Math.max(1, longestSide))
-    : Math.min(1, 3000 / longestSide);
+  const scale = longestSide < 2400 ? Math.min(2, 2400 / Math.max(1, longestSide)) : Math.min(1, 3000 / longestSide);
   const rotated = rotation % 180 !== 0;
   const canvas = document.createElement("canvas");
   canvas.width = Math.max(1, Math.round((rotated ? sourceHeight : sourceWidth) * scale));
@@ -147,8 +176,8 @@ function canvasFromBitmap(bitmap: ImageBitmap, rotation: number, mode: EnhanceMo
   context.rotate(rotation * Math.PI / 180);
   context.drawImage(bitmap, -(sourceWidth * scale) / 2, -(sourceHeight * scale) / 2, sourceWidth * scale, sourceHeight * scale);
   context.setTransform(1, 0, 0, 1, 0, 0);
-
   if (mode === "normal") return canvas;
+
   const image = context.getImageData(0, 0, canvas.width, canvas.height);
   const pixels = image.data;
   for (let index = 0; index < pixels.length; index += 4) {
@@ -236,20 +265,13 @@ export default function OpsScanFallback() {
       if (autoClear) clearTimer.current = window.setTimeout(() => setStatus(""), 5200);
     };
 
-    const readFullDocument = async (file: File, runId: number, barcodeAlreadyRead: boolean) => {
-      try {
-        const details = await extractFullTicket(file, (message) => runId === activeRun.current && showStatus(message));
-        if (runId !== activeRun.current) return;
-        const review = details.confidence === "low" ? " — راجع البيانات قبل التأكيد" : "";
-        showStatus(`تمت قراءة التذكرة كاملة وتعبئة معلومات الرحلة تلقائياً${review}.`, true);
-        try { navigator.vibrate?.(100); } catch {}
-      } catch (error) {
-        console.error("ops full ticket extraction", error);
-        if (runId !== activeRun.current) return;
-        showStatus(barcodeAlreadyRead
-          ? "تمت قراءة الباركود، لكن تعذر إكمال باقي بيانات التذكرة تلقائياً. راجع وقت الإقلاع يدوياً."
-          : "ما قدرت أستخرج معلومات واضحة من التذكرة. جرّب PDF الأصلي أو صورة أوضح.", true);
-      }
+    const readFullDocument = async (file: File, runId: number) => {
+      const details = await extractFullTicket(file, (message) => runId === activeRun.current && showStatus(message));
+      if (runId !== activeRun.current) return null;
+      const review = details.confidence === "low" ? " — راجع البيانات قبل التأكيد" : "";
+      showStatus(`تمت قراءة التذكرة كاملة ونزلت المعلومات داخل الحقول تلقائياً${review}.`, true);
+      try { navigator.vibrate?.(100); } catch {}
+      return details;
     };
 
     const onChange = (event: Event) => {
@@ -261,48 +283,61 @@ export default function OpsScanFallback() {
 
       window.setTimeout(async () => {
         if (runId !== activeRun.current) return;
-        const fieldBefore = rawField();
-        const primaryRead = Boolean(fieldBefore && looksLikeBoardingPass(fieldBefore.value));
-        if (primaryRead) {
-          if (file.type === "application/pdf") {
-            showStatus("تمت قراءة الباركود. جاري إكمال بيانات الرحلة من ملف PDF بالكامل...");
-            await readFullDocument(file, runId, true);
-          }
-          return;
-        }
-
-        showStatus("جاري البحث عن باركود البوردنغ داخل الملف...");
-        let result: { raw: string; format: string } | null = null;
-        try {
-          result = file.type.startsWith("image/")
-            ? await scanImage(file, (message) => runId === activeRun.current && showStatus(message))
-            : await scanPdf(file, (message) => runId === activeRun.current && showStatus(message));
-        } catch (error) {
-          console.error("ops robust barcode fallback", error);
-        }
-        if (runId !== activeRun.current) return;
-
         const field = rawField();
-        if (!field) return;
-        if (looksLikeBoardingPass(field.value)) {
-          if (file.type === "application/pdf") await readFullDocument(file, runId, true);
-          return;
-        }
+        const validPrimaryBoarding = Boolean(field && looksLikeBoardingPass(field.value));
 
-        if (result) {
-          setNativeValue(field, result.raw);
-          if (file.type === "application/pdf") {
-            showStatus(`تمت قراءة ${result.format || "PDF417"}. جاري إكمال تفاصيل الرحلة من التذكرة...`);
-            await readFullDocument(file, runId, true);
-          } else {
-            showStatus(`تمت قراءة البوردنغ وتعبئة المعلومات تلقائياً — ${result.format || "PDF417"}.`, true);
+        if (file.type === "application/pdf") {
+          // Full ticket PDFs are documents first, not barcodes. Read the whole
+          // itinerary immediately so unrelated booking QR codes cannot block it.
+          try {
+            showStatus(validPrimaryBoarding
+              ? "تمت قراءة البوردنغ؛ جاري إكمال وقت الرحلة وباقي البيانات من ملف PDF..."
+              : "جاري قراءة ملف PDF كتذكرة كاملة واستخراج بيانات رحلة بغداد...");
+            await readFullDocument(file, runId);
+            return;
+          } catch (error) {
+            console.error("ops full PDF extraction", error);
+            if (runId !== activeRun.current) return;
+            showStatus("تعذرت القراءة الذكية؛ جاري تجربة قارئ الباركود المحلي داخل الـPDF...");
+            try {
+              const result = await scanPdf(file, (message) => runId === activeRun.current && showStatus(message));
+              if (runId !== activeRun.current) return;
+              if (result) {
+                await setReactValue(rawField(), result.raw);
+                showStatus(`تمت قراءة البوردنغ محلياً — ${result.format || "PDF417"}.`, true);
+                return;
+              }
+            } catch (scanError) {
+              console.error("ops PDF barcode fallback", scanError);
+            }
+            showStatus("ما قدرت أقرأ بيانات الرحلة من هذا الـPDF. راجع الاتصال أو جرّب الملف الأصلي مرة ثانية.", true);
+            return;
           }
-          return;
         }
 
-        showStatus("ماكو باركود بوردنغ مقروء؛ جاري قراءة نص التذكرة والرحلة بالكامل...");
-        await readFullDocument(file, runId, false);
-      }, 700);
+        if (validPrimaryBoarding) return;
+
+        showStatus("جاري فحص الباركود داخل الصورة وتحسينها...");
+        try {
+          const result = await scanImage(file, (message) => runId === activeRun.current && showStatus(message));
+          if (runId !== activeRun.current) return;
+          if (result) {
+            await setReactValue(rawField(), result.raw);
+            showStatus(`تمت قراءة البوردنغ وتعبئة المعلومات تلقائياً — ${result.format || "PDF417"}.`, true);
+            return;
+          }
+        } catch (error) {
+          console.error("ops robust image barcode fallback", error);
+        }
+
+        try {
+          showStatus("ماكو Boarding Pass barcode مقروء؛ جاري قراءة محتوى الصورة كتذكرة...");
+          await readFullDocument(file, runId);
+        } catch (error) {
+          console.error("ops image ticket extraction", error);
+          if (runId === activeRun.current) showStatus("ما قدرت أستخرج معلومات واضحة من الصورة. جرّب صورة أوضح أو القارئ الخارجي.", true);
+        }
+      }, 650);
     };
 
     document.addEventListener("change", onChange, true);
