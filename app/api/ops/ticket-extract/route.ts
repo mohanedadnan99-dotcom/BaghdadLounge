@@ -1,5 +1,6 @@
 import { getVercelOidcToken } from "@vercel/oidc";
 import { opsSessionFromRequest } from "@/lib/lounge-ops-auth";
+import { parseSearchableTicketText } from "@/lib/ops-pdf-ticket-reader";
 
 export const runtime = "nodejs";
 export const maxDuration = 45;
@@ -8,6 +9,28 @@ const ACCEPTED_TYPES = new Set(["application/pdf", "image/jpeg", "image/png", "i
 const MAX_BYTES = 12 * 1024 * 1024;
 
 type OpenAIResponse = { output?: Array<{ content?: Array<{ type?: string; text?: string }> }> };
+
+async function readSearchablePdf(bytes: Buffer) {
+  try {
+    const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+    const pdf = await pdfjs.getDocument({ data: Uint8Array.from(bytes) }).promise;
+    const pages = Math.min(pdf.numPages, 8);
+    const parts: string[] = [];
+    for (let pageNumber = 1; pageNumber <= pages; pageNumber += 1) {
+      const page = await pdf.getPage(pageNumber);
+      const content = await page.getTextContent();
+      parts.push(content.items
+        .map((item) => ("str" in item ? String(item.str || "") : ""))
+        .filter(Boolean)
+        .join(" "));
+    }
+    const details = parseSearchableTicketText(parts.join("\n"));
+    if (details?.flightNumber && (details.origin === "BGW" || details.destination === "BGW")) return details;
+  } catch (error) {
+    console.warn("Local searchable PDF ticket read failed", error instanceof Error ? error.message : "unknown");
+  }
+  return null;
+}
 
 export async function POST(request: Request) {
   const session = opsSessionFromRequest(request);
@@ -20,14 +43,24 @@ export async function POST(request: Request) {
     if (!ACCEPTED_TYPES.has(file.type)) return Response.json({ error: "الملف غير مدعوم. استخدم PDF أو JPG أو PNG أو WEBP." }, { status: 415 });
     if (file.size > MAX_BYTES) return Response.json({ error: "حجم الملف كبير. الحد الأقصى 12 ميغابايت." }, { status: 413 });
 
+    const bytes = Buffer.from(await file.arrayBuffer());
+
+    // Searchable e-ticket PDFs are parsed locally first. This is faster, works
+    // without AI credits, and avoids treating booking/manage QR codes as BCBP.
+    if (file.type === "application/pdf") {
+      const localDetails = await readSearchablePdf(bytes);
+      if (localDetails) {
+        return Response.json({ details: localDetails, source: "local_pdf_text" }, { headers: { "Cache-Control": "no-store" } });
+      }
+    }
+
     const openAiKey = process.env.OPENAI_API_KEY;
     let gatewayToken = process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_OIDC_TOKEN;
     if (!openAiKey && !gatewayToken) gatewayToken = await getVercelOidcToken();
     if (!openAiKey && !gatewayToken) {
-      return Response.json({ error: "خدمة القراءة الذكية غير مفعلة حالياً." }, { status: 503 });
+      return Response.json({ error: "ما لقيت نص رحلة قابل للقراءة داخل الملف، وخدمة قراءة الصور غير مفعلة حالياً." }, { status: 503 });
     }
 
-    const bytes = Buffer.from(await file.arrayBuffer());
     const dataUrl = `data:${file.type};base64,${bytes.toString("base64")}`;
     const attachment = file.type === "application/pdf"
       ? { type: "input_file", filename: file.name || "ticket.pdf", file_data: dataUrl }
@@ -104,6 +137,9 @@ Return passenger name, airline name and code, flight number, origin airport IATA
     if (!response.ok) {
       const providerError = await response.text();
       console.error("Ops ticket extraction failed", response.status, providerError.slice(0, 800));
+      if (response.status === 429) {
+        return Response.json({ error: "خدمة قراءة الصور وصلت حد الاستخدام. ملفات PDF النصية تبقى تنقري محلياً." }, { status: 503 });
+      }
       return Response.json({ error: "تعذرت القراءة الذكية للتذكرة حالياً." }, { status: 502 });
     }
 
@@ -114,7 +150,7 @@ Return passenger name, airline name and code, flight number, origin airport IATA
     if (!outputText) return Response.json({ error: "لم أجد معلومات رحلة واضحة داخل الملف." }, { status: 422 });
 
     const details = JSON.parse(outputText) as Record<string, string | null>;
-    return Response.json({ details });
+    return Response.json({ details, source: "ai" });
   } catch (error) {
     console.error("Ops ticket extraction error", error instanceof Error ? error.message : "unknown");
     return Response.json({ error: "تعذرت قراءة التذكرة. جرّب PDF الأصلي أو صورة أوضح." }, { status: 500 });
