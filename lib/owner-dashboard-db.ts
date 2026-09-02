@@ -44,7 +44,7 @@ export async function ownerDashboardInsights() {
       FROM ops_entries
       WHERE lounge_status<>'cancelled' AND created_at >= (date_trunc('day', now() AT TIME ZONE 'Asia/Baghdad') AT TIME ZONE 'Asia/Baghdad')
       GROUP BY payment_type`,
-    db`SELECT to_char(created_at AT TIME ZONE 'Asia/Baghdad','HH24:00') hour,
+    db`SELECT to_char(created_at AT TIME ZONE 'Asia/Baghdad','HH24:00') AS hour_label,
       COUNT(*)::int passengers,COALESCE(SUM(amount_iqd),0)::bigint total_iqd
       FROM ops_entries
       WHERE lounge_status<>'cancelled' AND created_at >= (date_trunc('day', now() AT TIME ZONE 'Asia/Baghdad') AT TIME ZONE 'Asia/Baghdad')
@@ -92,7 +92,7 @@ export async function ownerDashboardInsights() {
       amountIqd: String(row.amount_iqd || 0),
     })),
     hourly: hourlyRows.map((row: any) => ({
-      hour: String(row.hour || ""),
+      hour: String(row.hour_label || ""),
       passengers: Number(row.passengers || 0),
       totalIqd: String(row.total_iqd || 0),
     })),

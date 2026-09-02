@@ -60,6 +60,7 @@ type DashboardData = {
   lounges?: Lounge[];
   activity?: Activity[];
   sync?: { pending?: number; failed?: number; synced?: number; last_synced_at?: string | null };
+  sheetSyncConfiguration?: { ready?: boolean; message?: string };
   session?: { name?: string; role?: string };
 };
 
@@ -143,6 +144,7 @@ export default function OwnerDashboard({ data }: { data: DashboardData }) {
   const sync = data.sync || {};
   const pendingSync = Number(sync.pending || 0);
   const failedSync = Number(sync.failed || 0);
+  const sheetSyncReady = data.sheetSyncConfiguration?.ready !== false;
   const recoveredOffline = Number(insights.offline?.recoveredToday || 0);
   const airlineConfig = insights.airlineConfig || {};
   const activity = (data.activity || []).slice(0, 8);
@@ -157,12 +159,13 @@ export default function OwnerDashboard({ data }: { data: DashboardData }) {
     for (const lounge of lounges) {
       if (!lounge.shiftName) items.push({ level: "bad", title: `${lounge.loungeName}: ماكو شفت مفتوح`, text: "لازم مسؤول الشفت يفتح الشفت قبل تسجيل عمليات جديدة." });
     }
-    if (failedSync > 0) items.push({ level: "bad", title: `${failedSync} عملية فشلت بالمزامنة`, text: "العمليات محفوظة بقاعدة البيانات وتحتاج إعادة محاولة Google Sheet." });
+    if (!sheetSyncReady) items.push({ level: "bad", title: "ربط Google Sheet غير مهيأ", text: `${data.sheetSyncConfiguration?.message || "أكمل إعداد الربط"}. العمليات محفوظة بقاعدة البيانات.` });
+    else if (failedSync > 0) items.push({ level: "bad", title: `${failedSync} عملية فشلت بالمزامنة`, text: "العمليات محفوظة بقاعدة البيانات وتحتاج إعادة محاولة Google Sheet." });
     else if (pendingSync > 0) items.push({ level: "warn", title: `${pendingSync} عملية بانتظار المزامنة`, text: "النظام يحتفظ بها تلقائياً إلى أن تكتمل المزامنة." });
     if (recoveredOffline > 0) items.push({ level: "good", title: `${recoveredOffline} عملية استرجعت بعد انقطاع اليوم`, text: "تم حفظها محلياً ثم إرسالها للنظام بعد رجوع الاتصال." });
     if (!items.length) items.push({ level: "good", title: "الوضع التشغيلي مستقر", text: "ماكو تنبيهات حرجة حالياً، والمزامنة تعمل بصورة طبيعية." });
     return items;
-  }, [lounges, failedSync, pendingSync, recoveredOffline]);
+  }, [lounges, failedSync, pendingSync, recoveredOffline, sheetSyncReady, data.sheetSyncConfiguration?.message]);
 
   const sessionName = data.session?.name || "الإدارة";
   const sessionRole = roleNames[data.session?.role || ""] || data.session?.role || "إدارة";
@@ -180,7 +183,7 @@ export default function OwnerDashboard({ data }: { data: DashboardData }) {
       <aside className={styles.health}>
         <div className={styles.healthTitle}><span>حالة النظام</span><button className={styles.refresh} onClick={loadInsights} disabled={refreshing}>{refreshing ? "جاري التحديث" : "تحديث"}</button></div>
         <HealthRow label="قاعدة البيانات" value={error ? "تعذر التحديث" : "متصلة"} tone={error ? "bad" : "good"}/>
-        <HealthRow label="Google Sheet" value={failedSync ? `${failedSync} فشل` : pendingSync ? `${pendingSync} معلّق` : "مستقرة"} tone={failedSync ? "bad" : pendingSync ? "warn" : "good"}/>
+        <HealthRow label="Google Sheet" value={!sheetSyncReady ? "الربط غير مهيأ" : failedSync ? `${failedSync} فشل` : pendingSync ? `${pendingSync} معلّق` : "مستقرة"} tone={!sheetSyncReady || failedSync ? "bad" : pendingSync ? "warn" : "good"}/>
         <HealthRow label="عمليات Offline اليوم" value={String(recoveredOffline)} tone="good"/>
         <HealthRow label="آخر تحديث" value={insights.generatedAt ? shortTime(insights.generatedAt) : "—"} tone="neutral"/>
       </aside>
