@@ -1,3 +1,3 @@
 import type { ReactNode } from "react";
-import OpsPricingBridge from "@/components/ops-pricing-bridge";
-export default function OpsLayout({children}:{children:ReactNode}){return <><OpsPricingBridge/>{children}</>}
+import OpsOfflineBootstrap from "@/components/ops-offline-bootstrap";
+export default function OpsLayout({children}:{children:ReactNode}){return <><OpsOfflineBootstrap/>{children}</>}

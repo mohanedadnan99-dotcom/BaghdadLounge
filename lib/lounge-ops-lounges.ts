@@ -36,8 +36,8 @@ export async function loungeDashboardStatus() {
 
   const [openShiftRows, metricsRows, employeeRows] = await Promise.all([
     db`
-      SELECT DISTINCT ON (u.lounge_name)
-        u.lounge_name,
+      SELECT DISTINCT ON (s.lounge_name)
+        s.lounge_name,
         u.name employee_name,
         u.username,
         u.role,
@@ -46,7 +46,7 @@ export async function loungeDashboardStatus() {
       FROM ops_shifts s
       JOIN ops_employees u ON u.id=s.employee_id
       WHERE s.status='open' AND u.active=TRUE
-      ORDER BY u.lounge_name,s.opened_at DESC
+      ORDER BY s.lounge_name,s.opened_at DESC
     `,
     db`
       SELECT

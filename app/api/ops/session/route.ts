@@ -15,7 +15,7 @@ export async function POST(request: Request) {
     const body = await request.json() as { username?: string; password?: string };
     const employee = await authenticateOpsEmployee(body.username || "", body.password || "");
     if (!employee) return Response.json({ message: "بيانات الدخول غير صحيحة أو الحساب موقوف" }, { status: 401 });
-    const token = createOpsSession({ employeeId: employee.id, name: employee.name, username: employee.username, role: employee.role, assignedShift: employee.assignedShift, permissions: employee.permissions });
+    const token = createOpsSession({ employeeId: employee.id, name: employee.name, username: employee.username, role: employee.role, assignedShift: employee.assignedShift, loungeName: employee.loungeName, permissions: employee.permissions });
     return Response.json({ user: employee }, { headers: { "Cache-Control": "no-store", "Set-Cookie": opsSessionCookie(token) } });
   } catch (error) {
     console.error("ops login", error);

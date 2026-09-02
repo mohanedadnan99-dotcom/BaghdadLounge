@@ -3,6 +3,7 @@ import {
   createOpsEntry,
   findPossibleDuplicateEntry,
   getOpenOpsShift,
+  getOpsEntryByClientMutationId,
   listCurrentLoungePassengers,
   updateOpsPassengerFlight,
   updateOpsPassengerStatus,
@@ -10,6 +11,7 @@ import {
   type OpsPassengerStatus,
   type OpsPaymentType,
 } from "@/lib/lounge-ops-db";
+import { airlineDisplayName, normalizeAirlineCode } from "@/lib/airlines";
 import { parseIataBcbp } from "@/lib/boarding-pass";
 import { syncOpsEntryToGoogleSheet } from "@/lib/ops-sheet-sync";
 import {
@@ -91,17 +93,36 @@ export async function POST(request: Request) {
   const session = opsSessionFromRequest(request);
   if (!session) return Response.json({ message: "غير مصرح" }, { status: 401 });
   try {
+    const body = await request.json() as Record<string, unknown>;
+    const clientMutationId = String(body.clientMutationId || "").trim().slice(0, 100);
+    if (clientMutationId) {
+      const existing = await getOpsEntryByClientMutationId(clientMutationId);
+      if (existing) return Response.json({ entry: existing, idempotent: true, sheetSync: (existing as any).sheet_sync_status || "pending" });
+    }
     const shift: any = await getOpenOpsShift(session.employeeId);
     if (!shift) return Response.json({ message: "افتح الشفت أولاً قبل تسجيل أي مسافر" }, { status: 409 });
+    if (body.syncedFromOffline === true && body.shiftId && Number(body.shiftId) !== Number(shift.id)) {
+      return Response.json({ message: "الشفت تغيّر قبل مزامنة العملية؛ حُفظت محلياً وتحتاج مراجعة المدير" }, { status: 409 });
+    }
 
-    const body = await request.json() as Record<string, unknown>;
     const boardingRaw = String(body.boardingRaw || "");
     const parsed = boardingRaw ? parseIataBcbp(boardingRaw) : null;
     const passengerName = String(body.passengerName || parsed?.passengerName || "").trim();
     const flightNumber = String(body.flightNumber || parsed?.flightNumber || "").trim();
-    const airline = String(body.airline || parsed?.carrier || "").trim();
+    const airlineCode = normalizeAirlineCode(parsed?.carrier || body.airline, flightNumber);
+    const airline = airlineDisplayName(body.airline || parsed?.carrier || airlineCode, flightNumber);
     const billingCompany = String(body.billingCompany || "").trim();
     const departureAt = parseBaghdadDeparture(body.departureAt);
+    const syncedFromOffline = body.syncedFromOffline === true;
+    let offlineOccurredAt: string | undefined;
+    if (syncedFromOffline) {
+      const occurred = new Date(String(body.offlineOccurredAt || ""));
+      if (Number.isNaN(occurred.getTime())) return Response.json({ message: "وقت التسجيل المحلي غير صحيح" }, { status: 400 });
+      if (occurred.getTime() > Date.now() + 5 * 60_000 || occurred.getTime() < Date.now() - 24 * 60 * 60_000) {
+        return Response.json({ message: "وقت التسجيل المحلي خارج مدة الشفت المسموحة" }, { status: 400 });
+      }
+      offlineOccurredAt = occurred.toISOString();
+    }
 
     if (!passengerName) return Response.json({ message: "اسم المسافر مطلوب أو امسح Boarding Pass صالح" }, { status: 400 });
     if (!body.overrideDuplicate) {
@@ -120,21 +141,28 @@ export async function POST(request: Request) {
       loungeName: String(shift.lounge_name || body.loungeName || ""),
       shiftName: String(shift.shift_name || session.assignedShift || ""),
       category: String(body.passengerCategory || ""),
-      airline,
+      airline: airlineCode || airline,
+      flightNumber,
       specialCode: String(body.specialCode || ""),
       age: body.passengerAge === undefined ? undefined : Number(body.passengerAge),
     });
     const requestedAmount = Number(body.amountIqd);
     const notes = String(body.notes || "").trim();
-    const override = validateManualOverride(
-      pricing,
-      String(session.role || ""),
-      Number.isFinite(requestedAmount) ? requestedAmount : Number(pricing.priceIqd || 0),
-      notes,
-    );
+    const override = syncedFromOffline
+      ? {
+          amount: Number.isFinite(requestedAmount) ? Math.max(0, Math.min(1_000_000, Math.round(requestedAmount))) : Number(pricing.priceIqd || 0),
+          overridden: Number.isFinite(requestedAmount) && Math.round(requestedAmount) !== Number(pricing.priceIqd || 0),
+          warning: Number.isFinite(requestedAmount) && Math.round(requestedAmount) !== Number(pricing.priceIqd || 0),
+        }
+      : validateManualOverride(
+          pricing,
+          String(session.role || ""),
+          Number.isFinite(requestedAmount) ? requestedAmount : Number(pricing.priceIqd || 0),
+          notes,
+        );
     const amountIqd = override.amount;
     let paymentType = String(pricing.paymentType || body.paymentType || "cash") as OpsPaymentType;
-    if (pricing.source === "default" && payments.includes(String(body.paymentType || "") as OpsPaymentType)) {
+    if ((pricing.source === "default" || syncedFromOffline) && payments.includes(String(body.paymentType || "") as OpsPaymentType)) {
       paymentType = String(body.paymentType) as OpsPaymentType;
     }
     if (!payments.includes(paymentType)) return Response.json({ message: "طريقة الحساب غير صحيحة" }, { status: 400 });
@@ -155,6 +183,7 @@ export async function POST(request: Request) {
     const entry: any = await createOpsEntry({
       passengerName,
       airline,
+      airlineCode,
       flightNumber,
       origin: String(body.origin || parsed?.origin || ""),
       destination: String(body.destination || parsed?.destination || ""),
@@ -166,12 +195,16 @@ export async function POST(request: Request) {
       amountIqd,
       employeeId: session.employeeId,
       shiftId: Number(shift.id),
+      loungeName: String(shift.lounge_name || session.loungeName || "لاونج بغداد") as any,
       departureAt,
       gateNumber: String(body.gateNumber || "").trim().slice(0, 20),
-      entrySource: body.entrySource === "manual" || body.entrySource === "ticket_image" ? body.entrySource : "scan",
-      notes: `${notes}${override.overridden ? ` [تعديل سعر: المعتمد ${Number(pricing.priceIqd).toLocaleString("en-US")}]` : ""}${override.warning ? " [تنبيه سعر غير اعتيادي]" : ""}${body.overrideDuplicate ? " [تم تجاوز تنبيه التكرار]" : ""}`.trim(),
+      entrySource: syncedFromOffline ? "offline" : body.entrySource === "manual" || body.entrySource === "ticket_image" ? body.entrySource : "scan",
+      notes: `${notes}${syncedFromOffline ? ` [سُجل دون إنترنت: ${offlineOccurredAt}]` : ""}${override.overridden ? ` [السعر الحالي ${Number(pricing.priceIqd).toLocaleString("en-US")}]` : ""}${override.warning ? " [بحاجة مراجعة سعر]" : ""}${body.overrideDuplicate ? " [تم تجاوز تنبيه التكرار]" : ""}`.trim(),
+      clientMutationId: clientMutationId || undefined,
+      offlineOccurredAt,
+      syncedFromOffline,
     });
-    await applyPricingSnapshot(Number(entry.id), pricing, amountIqd);
+    await applyPricingSnapshot(Number(entry.id), { ...pricing, ...(syncedFromOffline ? { offlineSnapshot: body.pricingSnapshot || null, offlineOccurredAt } : {}) }, amountIqd);
     const sync = await syncOpsEntryToGoogleSheet(Number(entry.id));
     return Response.json({ entry, parsed, pricing, priceWarning: override.warning, sheetSync: sync.status }, { status: 201 });
   } catch (error) {

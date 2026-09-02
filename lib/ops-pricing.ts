@@ -1,11 +1,17 @@
 import { neon } from "@neondatabase/serverless";
+import { normalizeAirlineCode } from "./airlines";
+import { ensureOpsTables } from "./lounge-ops-db";
+import { resolveOpsAirlinePrice } from "./ops-airlines";
+import { ensureOpsCompanies } from "./ops-companies";
 
 function connectionString(){const v=process.env.DATABASE_URL||process.env.POSTGRES_URL||process.env.NEON_DATABASE_URL;if(!v)throw new Error("DATABASE_URL is not configured");return v}
 function sql(){return neon(connectionString())}
 const payments=["cash","electronic","credit","complimentary","prepaid","voucher"];
 export type PricingRuleType="lounge"|"shift"|"category"|"promotion"|"airline"|"special";
 
-export async function ensureOpsPricing(){
+let ensurePromise:Promise<void>|null=null;
+async function createOpsPricingTables(){
+  await Promise.all([ensureOpsTables(),ensureOpsCompanies()]);
   const db=sql();
   await db`CREATE TABLE IF NOT EXISTS ops_pricing_settings(id INT PRIMARY KEY DEFAULT 1 CHECK(id=1),default_price_iqd BIGINT NOT NULL DEFAULT 40000,default_payment_type TEXT NOT NULL DEFAULT 'cash',allow_manual_override BOOLEAN NOT NULL DEFAULT TRUE,require_override_reason BOOLEAN NOT NULL DEFAULT TRUE,override_min_iqd BIGINT NOT NULL DEFAULT 0,override_max_iqd BIGINT NOT NULL DEFAULT 1000000,override_roles TEXT[] NOT NULL DEFAULT ARRAY['owner','manager','supervisor'],discount_reasons TEXT[] NOT NULL DEFAULT ARRAY['شركة','VIP','عرض','موافقة مدير','تصحيح خطأ'],abnormal_low_iqd BIGINT NOT NULL DEFAULT 20000,abnormal_high_iqd BIGINT NOT NULL DEFAULT 100000,child_free_under INT NOT NULL DEFAULT 0,updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`;
   await db`ALTER TABLE ops_pricing_settings ADD COLUMN IF NOT EXISTS override_min_iqd BIGINT NOT NULL DEFAULT 0`;await db`ALTER TABLE ops_pricing_settings ADD COLUMN IF NOT EXISTS override_max_iqd BIGINT NOT NULL DEFAULT 1000000`;await db`ALTER TABLE ops_pricing_settings ADD COLUMN IF NOT EXISTS override_roles TEXT[] NOT NULL DEFAULT ARRAY['owner','manager','supervisor']`;await db`ALTER TABLE ops_pricing_settings ADD COLUMN IF NOT EXISTS discount_reasons TEXT[] NOT NULL DEFAULT ARRAY['شركة','VIP','عرض','موافقة مدير','تصحيح خطأ']`;await db`ALTER TABLE ops_pricing_settings ADD COLUMN IF NOT EXISTS abnormal_low_iqd BIGINT NOT NULL DEFAULT 20000`;await db`ALTER TABLE ops_pricing_settings ADD COLUMN IF NOT EXISTS abnormal_high_iqd BIGINT NOT NULL DEFAULT 100000`;await db`ALTER TABLE ops_pricing_settings ADD COLUMN IF NOT EXISTS child_free_under INT NOT NULL DEFAULT 0`;await db`INSERT INTO ops_pricing_settings(id) VALUES(1) ON CONFLICT(id) DO NOTHING`;
@@ -14,6 +20,7 @@ export async function ensureOpsPricing(){
   await db`ALTER TABLE ops_companies ADD COLUMN IF NOT EXISTS credit_limit_iqd BIGINT NOT NULL DEFAULT 0`;await db`ALTER TABLE ops_companies ADD COLUMN IF NOT EXISTS block_over_credit BOOLEAN NOT NULL DEFAULT FALSE`;
   await db`ALTER TABLE ops_entries ADD COLUMN IF NOT EXISTS pricing_source TEXT NOT NULL DEFAULT ''`;await db`ALTER TABLE ops_entries ADD COLUMN IF NOT EXISTS pricing_rule_id BIGINT`;await db`ALTER TABLE ops_entries ADD COLUMN IF NOT EXISTS pricing_expected_iqd BIGINT NOT NULL DEFAULT 0`;await db`ALTER TABLE ops_entries ADD COLUMN IF NOT EXISTS pricing_snapshot JSONB NOT NULL DEFAULT '{}'::jsonb`;
 }
+export function ensureOpsPricing(){if(!ensurePromise){ensurePromise=createOpsPricingTables().catch(error=>{ensurePromise=null;throw error})}return ensurePromise}
 export async function getOpsPricingSettings(){await ensureOpsPricing();const db=sql();return (await db`SELECT * FROM ops_pricing_settings WHERE id=1`)[0]}
 export async function updateOpsPricingSettings(input:any,actor="system"){await ensureOpsPricing();const db=sql();const before=(await db`SELECT * FROM ops_pricing_settings WHERE id=1`)[0];const allowed=payments.includes(String(input.defaultPaymentType))?String(input.defaultPaymentType):'cash';const rows=await db`UPDATE ops_pricing_settings SET default_price_iqd=${Math.max(0,Math.round(Number(input.defaultPriceIqd||0)))},default_payment_type=${allowed},allow_manual_override=${input.allowManualOverride!==false},require_override_reason=${input.requireOverrideReason!==false},override_min_iqd=${Math.max(0,Number(input.overrideMinIqd||0))},override_max_iqd=${Math.max(0,Number(input.overrideMaxIqd||1000000))},override_roles=${Array.isArray(input.overrideRoles)?input.overrideRoles.map(String):['owner','manager','supervisor']},discount_reasons=${Array.isArray(input.discountReasons)?input.discountReasons.map(String):['شركة','VIP','عرض','موافقة مدير','تصحيح خطأ']},abnormal_low_iqd=${Math.max(0,Number(input.abnormalLowIqd||0))},abnormal_high_iqd=${Math.max(0,Number(input.abnormalHighIqd||1000000))},child_free_under=${Math.max(0,Number(input.childFreeUnder||0))},updated_at=NOW() WHERE id=1 RETURNING *`;await db`INSERT INTO ops_pricing_audit(actor,action,entity_type,entity_id,before_json,after_json) VALUES(${actor},'update','settings','1',${JSON.stringify(before)}::jsonb,${JSON.stringify(rows[0])}::jsonb)`;return rows[0]}
 export async function listPricingRules(){await ensureOpsPricing();const db=sql();return db`SELECT id::int,rule_type,key_value,label,price_iqd,payment_type,active,priority,valid_from,valid_to,metadata,created_at FROM ops_pricing_rules ORDER BY active DESC,priority ASC,rule_type,key_value`}
@@ -25,4 +32,60 @@ export async function getCompanyCreditState(name:string){await ensureOpsPricing(
 export async function saveCompanyCreditPolicy(input:{companyId:number;creditLimitIqd:number;blockOverCredit:boolean},actor="system"){await ensureOpsPricing();const db=sql();const before=(await db`SELECT * FROM ops_companies WHERE id=${input.companyId}`)[0];const rows=await db`UPDATE ops_companies SET credit_limit_iqd=${Math.max(0,Number(input.creditLimitIqd||0))},block_over_credit=${input.blockOverCredit} WHERE id=${input.companyId} RETURNING id::int,name,credit_limit_iqd,block_over_credit`;await db`INSERT INTO ops_pricing_audit(actor,action,entity_type,entity_id,before_json,after_json) VALUES(${actor},'update_credit','company',${String(input.companyId)},${JSON.stringify(before||{})}::jsonb,${JSON.stringify(rows[0]||{})}::jsonb)`;return rows[0]}
 export async function applyPricingSnapshot(entryId:number,pricing:any,actualAmount:number){await ensureOpsPricing();const db=sql();await db`UPDATE ops_entries SET pricing_source=${String(pricing.source||'')},pricing_rule_id=${pricing.ruleId||null},pricing_expected_iqd=${Number(pricing.priceIqd||0)},pricing_snapshot=${JSON.stringify({...pricing,actualAmount})}::jsonb WHERE id=${entryId}`}
 export function validateManualOverride(pricing:any,role:string,requestedAmount:number,notes:string){const s:any=pricing.settings||{};const expected=Number(pricing.priceIqd||0);if(requestedAmount===expected)return {amount:expected,overridden:false,warning:false};if(!s.allow_manual_override)return {amount:expected,overridden:false,warning:false};const roles=Array.isArray(s.override_roles)?s.override_roles.map(String):[];if(!roles.includes(role))throw new Error('ما عندك صلاحية لتعديل سعر المسافر');const min=Number(s.override_min_iqd||0),max=Number(s.override_max_iqd||1000000);if(requestedAmount<min||requestedAmount>max)throw new Error(`السعر المعدل لازم يكون بين ${min.toLocaleString('en-US')} و ${max.toLocaleString('en-US')} د.ع`);if(s.require_override_reason&&!notes.trim())throw new Error(`السعر المعتمد ${expected.toLocaleString('en-US')} د.ع. اكتب سبب تغيير السعر في الملاحظات.`);return {amount:requestedAmount,overridden:true,warning:requestedAmount<Number(s.abnormal_low_iqd||0)||requestedAmount>Number(s.abnormal_high_iqd||1000000)}}
-export async function resolveOpsPassengerPrice(input:{companyName?:string;loungeName?:string;shiftName?:string;category?:string;airline?:string;specialCode?:string;age?:number}){await ensureOpsPricing();const db=sql();const settings:any=(await db`SELECT * FROM ops_pricing_settings WHERE id=1`)[0];if(Number.isFinite(input.age)&&Number(input.age)<Number(settings.child_free_under||0))return {source:'category',ruleId:null,label:'مجاني حسب العمر',priceIqd:0,paymentType:'complimentary',settings};const special=String(input.specialCode||'').trim(),company=String(input.companyName||'').trim(),airline=String(input.airline||'').trim(),category=String(input.category||'').trim(),lounge=String(input.loungeName||'').trim(),shift=String(input.shiftName||'').trim();const candidates:[PricingRuleType,string][]=[];if(special)candidates.push(['special',special]);if(airline)candidates.push(['airline',airline]);if(category)candidates.push(['category',category]);if(lounge)candidates.push(['lounge',lounge]);if(shift)candidates.push(['shift',shift]);if(company){const rows=await db`SELECT id::int,name,price_iqd,billing_type FROM ops_companies WHERE active=TRUE AND LOWER(name)=LOWER(${company}) LIMIT 1`;const row:any=rows[0];if(row)return {source:'company',ruleId:null,label:String(row.name),companyId:Number(row.id),companyName:String(row.name),priceIqd:Number(row.price_iqd||0),paymentType:String(row.billing_type||'credit'),settings}}for(const [type,key] of candidates){const rows=await db`SELECT id::int,label,price_iqd,payment_type FROM ops_pricing_rules WHERE active=TRUE AND rule_type=${type} AND LOWER(key_value)=LOWER(${key}) AND (valid_from IS NULL OR valid_from<=NOW()) AND (valid_to IS NULL OR valid_to>=NOW()) ORDER BY priority ASC,id DESC LIMIT 1`;const r:any=rows[0];if(r)return {source:type,ruleId:Number(r.id),label:String(r.label||key),priceIqd:Number(r.price_iqd||0),paymentType:String(r.payment_type||'cash'),settings}}const promoRows=await db`SELECT id::int,label,price_iqd,payment_type FROM ops_pricing_rules WHERE active=TRUE AND rule_type='promotion' AND (valid_from IS NULL OR valid_from<=NOW()) AND (valid_to IS NULL OR valid_to>=NOW()) ORDER BY priority ASC,id DESC LIMIT 1`;const p:any=promoRows[0];if(p)return {source:'promotion',ruleId:Number(p.id),label:String(p.label||'عرض مؤقت'),priceIqd:Number(p.price_iqd||0),paymentType:String(p.payment_type||'cash'),settings};return {source:'default',ruleId:null,label:'السعر العام',companyId:null,companyName:'',priceIqd:Number(settings.default_price_iqd||40000),paymentType:String(settings.default_payment_type||'cash'),settings}}
+export async function resolveOpsPassengerPrice(input:{companyName?:string;loungeName?:string;shiftName?:string;category?:string;airline?:string;flightNumber?:string;specialCode?:string;age?:number}){
+  await ensureOpsPricing();
+  const db=sql();
+  const settings:any=(await db`SELECT * FROM ops_pricing_settings WHERE id=1`)[0];
+  if(Number.isFinite(input.age)&&Number(input.age)<Number(settings.child_free_under||0)){
+    return {source:'category',ruleId:null,label:'مجاني حسب العمر',priceIqd:0,paymentType:'complimentary',settings};
+  }
+  const special=String(input.specialCode||'').trim();
+  const company=String(input.companyName||'').trim();
+  const airline=String(input.airline||'').trim();
+  const airlineCode=normalizeAirlineCode(airline,input.flightNumber);
+  const category=String(input.category||'').trim();
+  const lounge=String(input.loungeName||'').trim();
+  const shift=String(input.shiftName||'').trim();
+
+  // An explicit special code is the only rule allowed to precede contractual
+  // company and airline profiles.
+  if(special){
+    const rows=await db`SELECT id::int,label,price_iqd,payment_type FROM ops_pricing_rules
+      WHERE active=TRUE AND rule_type='special' AND LOWER(key_value)=LOWER(${special})
+      AND (valid_from IS NULL OR valid_from<=NOW()) AND (valid_to IS NULL OR valid_to>=NOW())
+      ORDER BY priority ASC,id DESC LIMIT 1`;
+    const row:any=rows[0];
+    if(row)return {source:'special',ruleId:Number(row.id),label:String(row.label||special),priceIqd:Number(row.price_iqd||0),paymentType:String(row.payment_type||'cash'),settings};
+  }
+
+  if(company){
+    const rows=await db`SELECT id::int,name,price_iqd,billing_type FROM ops_companies WHERE active=TRUE AND LOWER(name)=LOWER(${company}) LIMIT 1`;
+    const row:any=rows[0];
+    if(row)return {source:'company',ruleId:null,label:String(row.name),companyId:Number(row.id),companyName:String(row.name),priceIqd:Number(row.price_iqd||0),paymentType:String(row.billing_type||'credit'),settings};
+  }
+
+  if(airlineCode&&lounge){
+    const profile=await resolveOpsAirlinePrice({airline:airlineCode,flightNumber:input.flightNumber,loungeName:lounge});
+    if(profile)return {...profile,settings};
+  }
+
+  const candidates:[PricingRuleType,string][]=[];
+  // Keep the legacy airline rule as a fallback for existing saved settings.
+  if(airlineCode)candidates.push(['airline',airlineCode]);
+  else if(airline)candidates.push(['airline',airline]);
+  if(category)candidates.push(['category',category]);
+  if(lounge)candidates.push(['lounge',lounge]);
+  if(shift)candidates.push(['shift',shift]);
+  for(const [type,key] of candidates){
+    const rows=await db`SELECT id::int,label,price_iqd,payment_type FROM ops_pricing_rules
+      WHERE active=TRUE AND rule_type=${type} AND LOWER(key_value)=LOWER(${key})
+      AND (valid_from IS NULL OR valid_from<=NOW()) AND (valid_to IS NULL OR valid_to>=NOW())
+      ORDER BY priority ASC,id DESC LIMIT 1`;
+    const row:any=rows[0];
+    if(row)return {source:type,ruleId:Number(row.id),label:String(row.label||key),priceIqd:Number(row.price_iqd||0),paymentType:String(row.payment_type||'cash'),settings};
+  }
+  const promoRows=await db`SELECT id::int,label,price_iqd,payment_type FROM ops_pricing_rules WHERE active=TRUE AND rule_type='promotion' AND (valid_from IS NULL OR valid_from<=NOW()) AND (valid_to IS NULL OR valid_to>=NOW()) ORDER BY priority ASC,id DESC LIMIT 1`;
+  const promotion:any=promoRows[0];
+  if(promotion)return {source:'promotion',ruleId:Number(promotion.id),label:String(promotion.label||'عرض مؤقت'),priceIqd:Number(promotion.price_iqd||0),paymentType:String(promotion.payment_type||'cash'),settings};
+  return {source:'default',ruleId:null,label:'السعر العام',companyId:null,companyName:'',priceIqd:Number(settings.default_price_iqd||40000),paymentType:String(settings.default_payment_type||'cash'),settings};
+}

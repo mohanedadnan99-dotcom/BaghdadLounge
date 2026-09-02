@@ -33,3 +33,52 @@ export const AIRLINE_VALUES = [
   ...BAGHDAD_AIRLINES.map((airline) => `${airline.en} (${airline.code})`),
   `${OTHER_AIRLINE.en} (${OTHER_AIRLINE.code})`,
 ];
+
+export type BaghdadAirline = (typeof BAGHDAD_AIRLINES)[number];
+
+const AIRLINE_BY_CODE = new Map(
+  BAGHDAD_AIRLINES.map((airline) => [airline.code.toUpperCase(), airline] as const),
+);
+
+/**
+ * Converts every airline representation used by the booking form, the door
+ * form and IATA BCBP into one stable carrier code. Pricing must always key off
+ * this value rather than a translated/display name.
+ */
+export function normalizeAirlineCode(value: unknown, flightNumber?: unknown) {
+  const raw = String(value || "").trim().toUpperCase();
+  if (AIRLINE_BY_CODE.has(raw)) return raw;
+
+  const parenthesized = raw.match(/\(([A-Z0-9]{2,3})\)\s*$/)?.[1];
+  if (parenthesized && AIRLINE_BY_CODE.has(parenthesized)) return parenthesized;
+
+  for (const airline of BAGHDAD_AIRLINES) {
+    const code = airline.code.toUpperCase();
+    if (raw === airline.en.toUpperCase() || raw === airline.ar.toUpperCase() || raw.endsWith(`(${code})`)) {
+      return code;
+    }
+  }
+
+  const flight = String(flightNumber || "").trim().toUpperCase().replace(/\s+/g, "");
+  // IATA flight designators are two alphanumeric characters. Match exactly
+  // two here so the first flight-number digit never becomes part of the code
+  // (for example TK0843 must resolve to TK, not TK0).
+  const flightPrefix = flight.match(/^([A-Z0-9]{2})(?=\d)/)?.[1];
+  if (flightPrefix && AIRLINE_BY_CODE.has(flightPrefix)) return flightPrefix;
+
+  // Unknown but structurally valid carriers are kept so the owner can add a
+  // profile later without changing the scanner.
+  if (/^[A-Z0-9]{2,3}$/.test(raw)) return raw;
+  if (parenthesized && /^[A-Z0-9]{2,3}$/.test(parenthesized)) return parenthesized;
+  return "";
+}
+
+export function getAirlineByCode(value: unknown) {
+  return AIRLINE_BY_CODE.get(normalizeAirlineCode(value));
+}
+
+export function airlineDisplayName(value: unknown, flightNumber?: unknown) {
+  const code = normalizeAirlineCode(value, flightNumber);
+  const airline = AIRLINE_BY_CODE.get(code);
+  return airline ? `${airline.en} (${airline.code})` : String(value || code).trim();
+}

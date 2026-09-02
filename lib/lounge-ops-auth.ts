@@ -1,8 +1,8 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
-import type { OpsRole, OpsShiftName } from "./lounge-ops-db";
+import type { OpsLoungeName, OpsRole, OpsShiftName } from "./lounge-ops-db";
 
 export const OPS_SESSION_COOKIE = "baghdad_ops_session";
-export type OpsSession = { employeeId:number; name:string; username:string; role:OpsRole; assignedShift:OpsShiftName; permissions:string[]; exp:number };
+export type OpsSession = { employeeId:number; name:string; username:string; role:OpsRole; assignedShift:OpsShiftName; loungeName:OpsLoungeName; permissions:string[]; exp:number };
 
 function secret() {
   const value = process.env.CAPTAIN_SESSION_SECRET || process.env.TELEGRAM_BOT_TOKEN || process.env.DATABASE_URL || process.env.POSTGRES_URL || process.env.NEON_DATABASE_URL;

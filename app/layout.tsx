@@ -1,10 +1,6 @@
 import type { Metadata, Viewport } from "next";
-import { Noto_Sans_Arabic, Manrope } from "next/font/google";
 import { TicketOcrFetchBridge } from "@/components/ticket-ocr-fetch-bridge";
 import "./globals.css";
-
-const arabic = Noto_Sans_Arabic({ subsets: ["arabic"], variable: "--font-arabic", weight: ["300", "400", "500", "600", "700"] });
-const latin = Manrope({ subsets: ["latin"], variable: "--font-latin" });
 
 export const metadata: Metadata = {
   title: { default: "Lounge Baghdad | لاونج بغداد", template: "%s | Lounge Baghdad" },
@@ -18,7 +14,7 @@ export const viewport: Viewport = { width: "device-width", initialScale: 1, them
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="ar" dir="rtl" className={`${arabic.variable} ${latin.variable}`}>
+    <html lang="ar" dir="rtl">
       <body><TicketOcrFetchBridge />{children}</body>
     </html>
   );

@@ -1,5 +1,5 @@
 import { neon } from "@neondatabase/serverless";
-import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
+import { createHash, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 
 export type OpsRole = "owner" | "manager" | "reception" | "supervisor" | "accountant";
 export type OpsShiftName = "الصباحي" | "المسائي" | "الليلي";
@@ -24,7 +24,9 @@ function verifyPassword(password: string, stored: string) {
   } catch { return false; }
 }
 
-export async function ensureOpsTables() {
+let ensurePromise: Promise<void> | null = null;
+
+async function createOpsTables() {
   const db = sql();
   await db`CREATE TABLE IF NOT EXISTS ops_employees(
     id BIGSERIAL PRIMARY KEY,
@@ -47,6 +49,7 @@ export async function ensureOpsTables() {
     id BIGSERIAL PRIMARY KEY,
     employee_id BIGINT NOT NULL REFERENCES ops_employees(id),
     shift_name TEXT NOT NULL,
+    lounge_name TEXT NOT NULL DEFAULT 'لاونج بغداد',
     status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','closed')),
     opened_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     closed_at TIMESTAMPTZ,
@@ -55,19 +58,31 @@ export async function ensureOpsTables() {
     closing_cash_iqd BIGINT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`;
+  await db`ALTER TABLE ops_shifts ADD COLUMN IF NOT EXISTS lounge_name TEXT`;
+  await db`UPDATE ops_shifts s SET lounge_name=u.lounge_name FROM ops_employees u
+    WHERE u.id=s.employee_id AND (s.lounge_name IS NULL OR s.lounge_name='')`;
+  await db`ALTER TABLE ops_shifts ALTER COLUMN lounge_name SET DEFAULT 'لاونج بغداد'`;
+  await db`ALTER TABLE ops_shifts ALTER COLUMN lounge_name SET NOT NULL`;
   await db`CREATE UNIQUE INDEX IF NOT EXISTS ops_one_open_shift_per_employee ON ops_shifts(employee_id) WHERE status='open'`;
+  await db`CREATE UNIQUE INDEX IF NOT EXISTS ops_one_open_shift_per_lounge
+    ON ops_shifts(lounge_name,shift_name) WHERE status='open'`;
 
   await db`CREATE TABLE IF NOT EXISTS ops_entries(
     id BIGSERIAL PRIMARY KEY,
     reference TEXT UNIQUE NOT NULL,
     passenger_name TEXT NOT NULL,
     airline TEXT NOT NULL DEFAULT '',
+    airline_code TEXT NOT NULL DEFAULT '',
     flight_number TEXT NOT NULL DEFAULT '',
     origin TEXT NOT NULL DEFAULT '',
     destination TEXT NOT NULL DEFAULT '',
     seat TEXT NOT NULL DEFAULT '',
     travel_class TEXT NOT NULL DEFAULT '',
     boarding_raw TEXT NOT NULL DEFAULT '',
+    boarding_hash TEXT NOT NULL DEFAULT '',
+    client_mutation_id TEXT,
+    offline_occurred_at TIMESTAMPTZ,
+    synced_from_offline BOOLEAN NOT NULL DEFAULT FALSE,
     payment_type TEXT NOT NULL CHECK(payment_type IN ('cash','electronic','credit','complimentary','prepaid','voucher')),
     billing_company TEXT NOT NULL DEFAULT '',
     amount_iqd BIGINT NOT NULL DEFAULT 0,
@@ -92,6 +107,11 @@ export async function ensureOpsTables() {
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`;
   await db`ALTER TABLE ops_entries ADD COLUMN IF NOT EXISTS lounge_name TEXT NOT NULL DEFAULT 'لاونج بغداد'`;
+  await db`ALTER TABLE ops_entries ADD COLUMN IF NOT EXISTS airline_code TEXT NOT NULL DEFAULT ''`;
+  await db`ALTER TABLE ops_entries ADD COLUMN IF NOT EXISTS boarding_hash TEXT NOT NULL DEFAULT ''`;
+  await db`ALTER TABLE ops_entries ADD COLUMN IF NOT EXISTS client_mutation_id TEXT`;
+  await db`ALTER TABLE ops_entries ADD COLUMN IF NOT EXISTS offline_occurred_at TIMESTAMPTZ`;
+  await db`ALTER TABLE ops_entries ADD COLUMN IF NOT EXISTS synced_from_offline BOOLEAN NOT NULL DEFAULT FALSE`;
   await db`ALTER TABLE ops_entries ADD COLUMN IF NOT EXISTS sheet_sync_status TEXT NOT NULL DEFAULT 'pending'`;
   await db`ALTER TABLE ops_entries ADD COLUMN IF NOT EXISTS sheet_sync_error TEXT NOT NULL DEFAULT ''`;
   await db`ALTER TABLE ops_entries ADD COLUMN IF NOT EXISTS sheet_synced_at TIMESTAMPTZ`;
@@ -106,6 +126,9 @@ export async function ensureOpsTables() {
   await db`ALTER TABLE ops_entries ADD COLUMN IF NOT EXISTS status_updated_by BIGINT REFERENCES ops_employees(id)`;
   await db`CREATE INDEX IF NOT EXISTS ops_entries_created_idx ON ops_entries(created_at DESC)`;
   await db`CREATE INDEX IF NOT EXISTS ops_entries_airline_idx ON ops_entries(airline,created_at DESC)`;
+  await db`CREATE INDEX IF NOT EXISTS ops_entries_airline_code_idx ON ops_entries(airline_code,created_at DESC)`;
+  await db`CREATE INDEX IF NOT EXISTS ops_entries_boarding_hash_idx ON ops_entries(boarding_hash,created_at DESC) WHERE boarding_hash<>''`;
+  await db`CREATE UNIQUE INDEX IF NOT EXISTS ops_entries_client_mutation_idx ON ops_entries(client_mutation_id) WHERE client_mutation_id IS NOT NULL`;
   await db`CREATE INDEX IF NOT EXISTS ops_entries_company_idx ON ops_entries(billing_company,created_at DESC)`;
   await db`CREATE INDEX IF NOT EXISTS ops_entries_shift_idx ON ops_entries(shift_id,created_at DESC)`;
   await db`CREATE INDEX IF NOT EXISTS ops_entries_lounge_idx ON ops_entries(lounge_name,created_at DESC)`;
@@ -145,6 +168,16 @@ export async function ensureOpsTables() {
   await db`CREATE INDEX IF NOT EXISTS ops_audit_created_idx ON ops_audit_log(created_at DESC)`;
 }
 
+export function ensureOpsTables() {
+  if (!ensurePromise) {
+    ensurePromise = createOpsTables().catch((error) => {
+      ensurePromise = null;
+      throw error;
+    });
+  }
+  return ensurePromise;
+}
+
 const normalizeEmployee = (row: any) => ({
   id: Number(row.id), name: String(row.name), username: String(row.username), role: row.role as OpsRole,
   assignedShift: row.assigned_shift as OpsShiftName, loungeName: String(row.lounge_name || 'لاونج بغداد') as OpsLoungeName,
@@ -158,20 +191,21 @@ export async function listOpsEmployees() {
   return rows.map(normalizeEmployee);
 }
 
-export async function createOpsEmployee(input: { name: string; username: string; password: string; role: OpsRole; assignedShift: OpsShiftName; permissions?: string[] }) {
+export async function createOpsEmployee(input: { name: string; username: string; password: string; role: OpsRole; assignedShift: OpsShiftName; loungeName?: OpsLoungeName; permissions?: string[] }) {
   await ensureOpsTables(); const db = sql();
-  const rows = await db`INSERT INTO ops_employees(name,username,password_hash,role,assigned_shift,permissions)
-    VALUES(${input.name.trim()},${input.username.trim().toLowerCase()},${hashPassword(input.password)},${input.role},${input.assignedShift},${input.permissions || []})
+  const rows = await db`INSERT INTO ops_employees(name,username,password_hash,role,assigned_shift,lounge_name,permissions)
+    VALUES(${input.name.trim()},${input.username.trim().toLowerCase()},${hashPassword(input.password)},${input.role},${input.assignedShift},${input.loungeName || 'لاونج بغداد'},${input.permissions || []})
     RETURNING id::int,name,username,role,assigned_shift,lounge_name,permissions,active,created_at`;
   return normalizeEmployee(rows[0]);
 }
 
-export async function updateOpsEmployee(input: { id: number; active?: boolean; role?: OpsRole; assignedShift?: OpsShiftName; permissions?: string[]; password?: string }) {
+export async function updateOpsEmployee(input: { id: number; active?: boolean; role?: OpsRole; assignedShift?: OpsShiftName; loungeName?: OpsLoungeName; permissions?: string[]; password?: string }) {
   await ensureOpsTables(); const db = sql();
   const beforeRows = await db`SELECT id::int,name,username,role,assigned_shift,lounge_name,permissions,active FROM ops_employees WHERE id=${input.id}`;
   if (input.active !== undefined) await db`UPDATE ops_employees SET active=${input.active},updated_at=NOW() WHERE id=${input.id}`;
   if (input.role !== undefined) await db`UPDATE ops_employees SET role=${input.role},updated_at=NOW() WHERE id=${input.id}`;
   if (input.assignedShift !== undefined) await db`UPDATE ops_employees SET assigned_shift=${input.assignedShift},updated_at=NOW() WHERE id=${input.id}`;
+  if (input.loungeName !== undefined) await db`UPDATE ops_employees SET lounge_name=${input.loungeName},updated_at=NOW() WHERE id=${input.id}`;
   if (input.permissions !== undefined) await db`UPDATE ops_employees SET permissions=${input.permissions},updated_at=NOW() WHERE id=${input.id}`;
   if (input.password) await db`UPDATE ops_employees SET password_hash=${hashPassword(input.password)},updated_at=NOW() WHERE id=${input.id}`;
   const rows = await db`SELECT id::int,name,username,role,assigned_shift,lounge_name,permissions,active,created_at FROM ops_employees WHERE id=${input.id}`;
@@ -190,10 +224,21 @@ export async function authenticateOpsEmployee(username: string, password: string
 export async function openOpsShift(employeeId: number, shiftName: OpsShiftName, openingCashIqd = 0) {
   await ensureOpsTables(); const db = sql();
   const employeeRows = await db`SELECT lounge_name FROM ops_employees WHERE id=${employeeId} AND active=TRUE`;
+  if (!employeeRows[0]) throw new Error('الموظف غير موجود أو حسابه موقوف');
   const loungeName = String((employeeRows[0] as any)?.lounge_name || 'لاونج بغداد');
-  const existing = await db`SELECT s.id::int,u.name,s.shift_name FROM ops_shifts s JOIN ops_employees u ON u.id=s.employee_id WHERE s.status='open' AND u.lounge_name=${loungeName} AND s.shift_name=${shiftName} LIMIT 1`;
+  const existing = await db`SELECT s.id::int,u.name,s.shift_name FROM ops_shifts s JOIN ops_employees u ON u.id=s.employee_id WHERE s.status='open' AND s.lounge_name=${loungeName} AND s.shift_name=${shiftName} LIMIT 1`;
   if (existing[0]) throw new Error(`هذا الشفت مفتوح مسبقاً في ${loungeName} بواسطة ${(existing[0] as any).name}`);
-  const rows = await db`INSERT INTO ops_shifts(employee_id,shift_name,opening_cash_iqd) VALUES(${employeeId},${shiftName},${Math.max(0,Math.round(openingCashIqd))}) RETURNING id::int,employee_id::int,shift_name,status,opened_at,opening_cash_iqd`;
+  let rows;
+  try {
+    rows = await db`INSERT INTO ops_shifts(employee_id,shift_name,lounge_name,opening_cash_iqd)
+      VALUES(${employeeId},${shiftName},${loungeName},${Math.max(0,Math.round(openingCashIqd))})
+      RETURNING id::int,employee_id::int,shift_name,lounge_name,status,opened_at,opening_cash_iqd`;
+  } catch (error) {
+    if (String((error as Error)?.message || error).toLowerCase().includes('unique')) {
+      throw new Error(`هذا الشفت انفتح قبل لحظات في ${loungeName}؛ حدّث الصفحة`);
+    }
+    throw error;
+  }
   await writeOpsAudit(employeeId, 'shift_open', 'shift', String((rows[0] as any).id), null, rows[0]);
   return rows[0];
 }
@@ -214,7 +259,7 @@ export async function getShiftSummary(shiftId: number) {
 
 export async function closeOpsShift(employeeId: number, note = '', closingCashIqd?: number, incomingEmployeeId?: number) {
   await ensureOpsTables(); const db = sql();
-  const openRows = await db`SELECT s.id::int,s.opening_cash_iqd,s.shift_name,u.lounge_name,u.name employee_name
+  const openRows = await db`SELECT s.id::int,s.opening_cash_iqd,s.shift_name,s.lounge_name,u.name employee_name
     FROM ops_shifts s JOIN ops_employees u ON u.id=s.employee_id
     WHERE s.employee_id=${employeeId} AND s.status='open' ORDER BY s.opened_at DESC LIMIT 1`;
   if (!openRows[0]) throw new Error('ماكو شفت مفتوح لهذا الموظف');
@@ -292,9 +337,25 @@ export async function acceptOpsShiftHandover(employeeId: number, handoverId: num
 
 export async function getOpenOpsShift(employeeId: number) {
   await ensureOpsTables(); const db = sql();
-  const rows = await db`SELECT s.id::int,s.employee_id::int,s.shift_name,s.status,s.opened_at,s.opening_cash_iqd,u.lounge_name
+  const rows = await db`SELECT s.id::int,s.employee_id::int,s.shift_name,s.status,s.opened_at,s.opening_cash_iqd,s.lounge_name
     FROM ops_shifts s JOIN ops_employees u ON u.id=s.employee_id
     WHERE s.employee_id=${employeeId} AND s.status='open' ORDER BY s.opened_at DESC LIMIT 1`;
+  return rows[0] || null;
+}
+
+export function boardingPassHash(value: unknown) {
+  const raw = String(value || '').trim().replace(/\r?\n/g, '');
+  return raw ? createHash('sha256').update(raw).digest('hex') : '';
+}
+
+export async function getOpsEntryByClientMutationId(clientMutationId: string) {
+  await ensureOpsTables(); const db = sql();
+  const id = String(clientMutationId || '').trim();
+  if (!id) return null;
+  const rows = await db`SELECT id::int,reference,passenger_name,airline,airline_code,flight_number,origin,destination,seat,
+    payment_type,billing_company,amount_iqd,lounge_name,entry_source,notes,sheet_sync_status,departure_at,
+    gate_number,lounge_status,client_mutation_id,offline_occurred_at,synced_from_offline,created_at
+    FROM ops_entries WHERE client_mutation_id=${id} LIMIT 1`;
   return rows[0] || null;
 }
 
@@ -302,7 +363,11 @@ export async function findPossibleDuplicateEntry(input: { boardingRaw?: string; 
   await ensureOpsTables(); const db = sql();
   const raw = String(input.boardingRaw || '').trim();
   if (raw) {
-    const rows = await db`SELECT id::int,reference,passenger_name,flight_number,lounge_name,created_at FROM ops_entries WHERE boarding_raw=${raw} AND lounge_status<>'cancelled' AND created_at>NOW()-INTERVAL '18 hours' ORDER BY created_at DESC LIMIT 1`;
+    const hash = boardingPassHash(raw);
+    const rows = await db`SELECT id::int,reference,passenger_name,flight_number,lounge_name,created_at FROM ops_entries
+      WHERE (boarding_hash=${hash} OR (boarding_hash='' AND boarding_raw=${raw}))
+      AND lounge_status<>'cancelled' AND created_at>NOW()-INTERVAL '18 hours'
+      ORDER BY created_at DESC LIMIT 1`;
     if (rows[0]) return rows[0];
   }
   const passenger = String(input.passengerName || '').trim().toLowerCase();
@@ -314,14 +379,27 @@ export async function findPossibleDuplicateEntry(input: { boardingRaw?: string; 
   return null;
 }
 
-export async function createOpsEntry(input: { passengerName: string; airline?: string; flightNumber?: string; origin?: string; destination?: string; seat?: string; travelClass?: string; boardingRaw?: string; paymentType: OpsPaymentType; billingCompany?: string; amountIqd?: number; employeeId: number; shiftId: number; loungeName?: OpsLoungeName; entrySource?: 'scan'|'manual'|'ticket_image'; notes?: string; departureAt?: string; gateNumber?: string }) {
+export async function createOpsEntry(input: { passengerName: string; airline?: string; airlineCode?: string; flightNumber?: string; origin?: string; destination?: string; seat?: string; travelClass?: string; boardingRaw?: string; paymentType: OpsPaymentType; billingCompany?: string; amountIqd?: number; employeeId: number; shiftId: number; loungeName?: OpsLoungeName; entrySource?: 'scan'|'manual'|'ticket_image'|'offline'; notes?: string; departureAt?: string; gateNumber?: string; clientMutationId?: string; offlineOccurredAt?: string; syncedFromOffline?: boolean }) {
   await ensureOpsTables(); const db = sql();
-  const employeeRows = await db`SELECT lounge_name FROM ops_employees WHERE id=${input.employeeId}`;
-  const loungeName = String(input.loungeName || (employeeRows[0] as any)?.lounge_name || 'لاونج بغداد');
+  const clientMutationId = String(input.clientMutationId || '').trim() || null;
+  if (clientMutationId) {
+    const existing = await getOpsEntryByClientMutationId(clientMutationId);
+    if (existing) return existing;
+  }
+  const shiftRows = await db`SELECT s.id::int,s.status,s.lounge_name,s.employee_id::int,u.active
+    FROM ops_shifts s JOIN ops_employees u ON u.id=s.employee_id
+    WHERE s.id=${input.shiftId} AND s.employee_id=${input.employeeId} LIMIT 1`;
+  const shift: any = shiftRows[0];
+  if (!shift || !shift.active) throw new Error('الشفت أو حساب الموظف غير صالح');
+  if (shift.status !== 'open') throw new Error('هذا الشفت مغلق؛ افتح شفت جديد قبل مزامنة العملية');
+  const loungeName = String(input.loungeName || shift.lounge_name || 'لاونج بغداد');
+  if (loungeName !== String(shift.lounge_name)) throw new Error('الصالة لا تطابق الشفت المفتوح');
   const reference = `BL-${new Date().toISOString().slice(2,10).replaceAll('-','')}-${randomBytes(3).toString('hex').toUpperCase()}`;
-  const rows = await db`INSERT INTO ops_entries(reference,passenger_name,airline,flight_number,origin,destination,seat,travel_class,boarding_raw,payment_type,billing_company,amount_iqd,employee_id,shift_id,lounge_name,entry_source,notes,sheet_sync_status,departure_at,gate_number,lounge_status)
-    VALUES(${reference},${input.passengerName.trim()},${input.airline||''},${input.flightNumber||''},${input.origin||''},${input.destination||''},${input.seat||''},${input.travelClass||''},${input.boardingRaw||''},${input.paymentType},${input.billingCompany||''},${Math.max(0,Math.round(input.amountIqd||0))},${input.employeeId},${input.shiftId},${loungeName},${input.entrySource||'scan'},${input.notes||''},'pending',${input.departureAt || null},${input.gateNumber||''},'inside')
-    RETURNING id::int,reference,passenger_name,airline,flight_number,origin,destination,seat,payment_type,billing_company,amount_iqd,lounge_name,entry_source,notes,sheet_sync_status,departure_at,gate_number,lounge_status,created_at`;
+  const boardingRaw = String(input.boardingRaw || '');
+  const rows = await db`INSERT INTO ops_entries(reference,passenger_name,airline,airline_code,flight_number,origin,destination,seat,travel_class,boarding_raw,boarding_hash,client_mutation_id,offline_occurred_at,synced_from_offline,payment_type,billing_company,amount_iqd,employee_id,shift_id,lounge_name,entry_source,notes,sheet_sync_status,departure_at,gate_number,lounge_status)
+    VALUES(${reference},${input.passengerName.trim()},${input.airline||''},${input.airlineCode||''},${input.flightNumber||''},${input.origin||''},${input.destination||''},${input.seat||''},${input.travelClass||''},${boardingRaw},${boardingPassHash(boardingRaw)},${clientMutationId},${input.offlineOccurredAt||null},${Boolean(input.syncedFromOffline)},${input.paymentType},${input.billingCompany||''},${Math.max(0,Math.round(input.amountIqd||0))},${input.employeeId},${input.shiftId},${loungeName},${input.entrySource||'scan'},${input.notes||''},'pending',${input.departureAt || null},${input.gateNumber||''},'inside')
+    ON CONFLICT(client_mutation_id) WHERE client_mutation_id IS NOT NULL DO UPDATE SET client_mutation_id=EXCLUDED.client_mutation_id
+    RETURNING id::int,reference,passenger_name,airline,airline_code,flight_number,origin,destination,seat,payment_type,billing_company,amount_iqd,lounge_name,entry_source,notes,sheet_sync_status,departure_at,gate_number,lounge_status,client_mutation_id,offline_occurred_at,synced_from_offline,created_at`;
   await writeOpsAudit(input.employeeId, 'entry_create', 'entry', String((rows[0] as any).id), null, rows[0]);
   return rows[0];
 }
@@ -443,7 +521,7 @@ export async function opsDashboard() {
       FROM ops_entries WHERE created_at>=CURRENT_DATE AND lounge_status<>'cancelled'`,
     db`SELECT e.id::int,e.reference,e.passenger_name,e.airline,e.flight_number,e.payment_type,e.billing_company,e.amount_iqd,e.lounge_name,e.sheet_sync_status,e.created_at,
       u.name employee_name,s.shift_name FROM ops_entries e JOIN ops_employees u ON u.id=e.employee_id JOIN ops_shifts s ON s.id=e.shift_id ORDER BY e.created_at DESC LIMIT 100`,
-    db`SELECT s.id::int,s.shift_name,s.status,s.opened_at,s.closed_at,u.name employee_name,u.username,u.lounge_name FROM ops_shifts s JOIN ops_employees u ON u.id=s.employee_id ORDER BY s.opened_at DESC LIMIT 50`,
+    db`SELECT s.id::int,s.shift_name,s.status,s.opened_at,s.closed_at,u.name employee_name,u.username,s.lounge_name FROM ops_shifts s JOIN ops_employees u ON u.id=s.employee_id ORDER BY s.opened_at DESC LIMIT 50`,
     getOpsSyncStatus()
   ]);
   const employees = await db`SELECT COUNT(*) FILTER(WHERE active)::int active FROM ops_employees`;
