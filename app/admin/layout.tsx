@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { BrainCircuit, Command, DatabaseZap, Gauge, Settings2, ShieldCheck, UserCog, WalletCards, Wrench } from "lucide-react";
+import { BookOpenText, BrainCircuit, Command, DatabaseZap, Gauge, Settings2, ShieldCheck, UserCog, WalletCards, Wrench } from "lucide-react";
 import AdminLogoutButton from "./logout-button";
 
 const tools=[
@@ -12,6 +12,7 @@ const tools=[
   {href:"/admin/governance",label:"الحوكمة والموثوقية",icon:DatabaseZap},
   {href:"/admin/intelligence",label:"الذكاء الإداري",icon:BrainCircuit},
   {href:"/admin/maintenance",label:"إدارة الصيانة",icon:Wrench},
+  {href:"/help",label:"دليل استخدام النظام",icon:BookOpenText},
 ];
 
 export default function AdminLayout({children}:{children:React.ReactNode}){
