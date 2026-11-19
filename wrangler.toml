@@ -1,0 +1,12 @@
+# مجموعة J8JI — الواجهة الرئيسية لـ j8ji.com
+name = "j8ji-group"
+compatibility_date = "2025-09-01"
+
+[assets]
+directory = "./public"
+
+# بعد ما j8ji.com يصير على Cloudflare، فعّل الدومين من هنا أو من لوحة Cloudflare:
+# routes = [
+#   { pattern = "j8ji.com", custom_domain = true },
+#   { pattern = "www.j8ji.com", custom_domain = true }
+# ]
